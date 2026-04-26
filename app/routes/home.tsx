@@ -33,12 +33,14 @@ const games: Game[] = [
     description: "Dash through bright worlds, secret pipes, and classic platforming chaos.",
     accent: "from-amber-300 to-orange-500",
     icon: "SM",
+    href: "/super-mario",
   },
   {
-    title: "Air Fighter",
+    title: "Sky Ace Infinite",
     description: "Take the sky in high-speed dogfights built for quick reflexes.",
     accent: "from-cyan-300 to-blue-500",
-    icon: "AF",
+    icon: "SA",
+    href: "/sky-ace-infinite",
   },
 ];
 

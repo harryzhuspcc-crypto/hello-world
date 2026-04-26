@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sky Ace Infinite</title>
+    <script type="module" crossorigin src="assets/index-C0hnAnK_.js"></script>
+    <link rel="stylesheet" crossorigin href="assets/index-BeugQohe.css">
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="game-canvas" aria-label="Sky Ace Infinite"></canvas>
+      <div class="sky-glow"></div>
+
+      <div class="hud">
+        <div class="hud__top">
+          <div class="panel stat-card">
+            <span class="label">Hull</span>
+            <div class="health-bar"><div id="health-bar-fill" class="health-bar__fill"></div></div>
+            <span id="health-value" class="value">100</span>
+          </div>
+
+          <div class="panel stat-card stat-card--compact">
+            <span class="label">Altitude</span>
+            <span id="altitude-value" class="value">0 m</span>
+          </div>
+
+          <div class="panel stat-card stat-card--compact">
+            <span class="label">Speed</span>
+            <span id="speed-value" class="value">0 kph</span>
+          </div>
+
+          <div class="panel stat-card stat-card--compact">
+            <span class="label">Threats</span>
+            <span id="enemy-count" class="value">0</span>
+          </div>
+
+          <div class="panel stat-card stat-card--compact">
+            <span class="label">Kills</span>
+            <span id="kills-value" class="value">0</span>
+          </div>
+
+          <div class="panel stat-card stat-card--compact">
+            <span class="label">Stage</span>
+            <span id="sector-value" class="value">1 / 5</span>
+          </div>
+
+          <div class="panel stat-card">
+            <span class="label">Objective</span>
+            <div class="energy-bar"><div id="upgrade-bar-fill" class="energy-bar__fill"></div></div>
+            <span id="upgrade-value" class="value">0 / 7</span>
+          </div>
+        </div>
+
+        <div id="status-pill" class="status-pill">Click start to launch</div>
+        <div id="crosshair" class="crosshair" aria-hidden="true"></div>
+        <div id="hit-marker" class="hit-marker" aria-hidden="true"></div>
+      </div>
+
+      <section id="menu-overlay" class="overlay overlay--visible">
+        <div class="overlay__card hero-card">
+          <div class="eyebrow">Stage-based sky runner</div>
+          <h1>Sky Ace Infinite</h1>
+          <p>
+            Punch through a fixed combat run, dodge interceptors rushing straight at your flight lane, and shoot them down before they collide.
+            Clear each stage, choose upgrades between waves, and survive long enough to bring down the final command carrier.
+          </p>
+
+          <div class="controls-grid">
+            <div><span>Move left / right</span><strong>A / D or Mouse</strong></div>
+            <div><span>Climb / dive</span><strong>W / S or Mouse</strong></div>
+            <div><span>Fire guns</span><strong>Hold Left Click or Space</strong></div>
+            <div><span>Toggle camera</span><strong>Right Click</strong></div>
+            <div><span>Pause</span><strong>Esc</strong></div>
+          </div>
+
+          <button id="start-button" class="cta-button">Start Mission</button>
+        </div>
+      </section>
+
+      <section id="paused-overlay" class="overlay">
+        <div class="overlay__card overlay__card--small">
+          <div class="eyebrow">Holding pattern</div>
+          <h2>Flight Paused</h2>
+          <p>Resume to jump back into the intercept run.</p>
+          <button id="resume-button" class="cta-button">Resume</button>
+        </div>
+      </section>
+
+      <section id="upgrade-overlay" class="overlay">
+        <div class="overlay__card">
+          <div class="eyebrow">Field retrofit</div>
+          <h2 id="upgrade-title">Choose an upgrade</h2>
+          <p id="upgrade-subtitle">Patch the fighter, then launch into the next stage.</p>
+
+          <div class="upgrade-grid">
+            <button class="upgrade-card" data-upgrade="guns">
+              <span class="upgrade-card__eyebrow">Weapons</span>
+              <strong>Autocannon Feed</strong>
+              <span class="upgrade-card__desc">More damage and slightly faster firing.</span>
+            </button>
+            <button class="upgrade-card" data-upgrade="hull">
+              <span class="upgrade-card__eyebrow">Durability</span>
+              <strong>Reinforced Airframe</strong>
+              <span class="upgrade-card__desc">Increase max hull and restore a chunk of health.</span>
+            </button>
+            <button class="upgrade-card" data-upgrade="engine">
+              <span class="upgrade-card__eyebrow">Speed</span>
+              <strong>Afterburner Tuning</strong>
+              <span class="upgrade-card__desc">Fly faster and keep more momentum through turns.</span>
+            </button>
+            <button class="upgrade-card" data-upgrade="handling">
+              <span class="upgrade-card__eyebrow">Agility</span>
+              <strong>Control Surface Boost</strong>
+              <span class="upgrade-card__desc">Turn harder and pitch more quickly onto targets.</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section id="gameover-overlay" class="overlay">
+        <div class="overlay__card overlay__card--small">
+          <div id="gameover-eyebrow" class="eyebrow">Aircraft lost</div>
+          <h2 id="gameover-title">Mission Failed</h2>
+          <p id="final-score-text">You were overwhelmed in the sky.</p>
+          <button id="restart-button" class="cta-button">Fly Again</button>
+        </div>
+      </section>
+    </div>
+
+  </body>
+</html>
