@@ -1,3 +1,5 @@
+import { Link } from "react-router";
+
 import type { Route } from "./+types/home";
 
 export function meta({}: Route.MetaArgs) {
@@ -10,12 +12,21 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
-const games = [
+type Game = {
+  title: string;
+  description: string;
+  accent: string;
+  icon: string;
+  href?: string;
+};
+
+const games: Game[] = [
   {
     title: "Tank Fight",
     description: "Armor up for tactical arena battles with explosive power-ups.",
     accent: "from-lime-300 to-emerald-400",
     icon: "TF",
+    href: "/tank-fight",
   },
   {
     title: "Super Mario",
@@ -30,6 +41,35 @@ const games = [
     icon: "AF",
   },
 ];
+
+const gameCardClass =
+  "group rounded-[1.75rem] border border-white/10 bg-white/[0.07] p-6 shadow-xl shadow-black/20 backdrop-blur transition hover:-translate-y-2 hover:border-white/25 hover:bg-white/[0.11]";
+
+function GameCard({ game }: { game: Game }) {
+  const content = (
+    <>
+      <div
+        className={`mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br ${game.accent} text-lg font-black text-slate-950 shadow-lg transition group-hover:rotate-3 group-hover:scale-105`}
+      >
+        {game.icon}
+      </div>
+      <h2 className="text-2xl font-bold">{game.title}</h2>
+      <p className="mt-3 text-sm leading-6 text-slate-300">
+        {game.description}
+      </p>
+    </>
+  );
+
+  if (game.href) {
+    return (
+      <Link className={gameCardClass} to={game.href}>
+        {content}
+      </Link>
+    );
+  }
+
+  return <article className={gameCardClass}>{content}</article>;
+}
 
 export default function Home() {
   return (
@@ -132,20 +172,7 @@ export default function Home() {
 
         <div className="mt-16 grid gap-5 md:grid-cols-3" id="games">
           {games.map((game) => (
-            <article
-              className="group rounded-[1.75rem] border border-white/10 bg-white/[0.07] p-6 shadow-xl shadow-black/20 backdrop-blur transition hover:-translate-y-2 hover:border-white/25 hover:bg-white/[0.11]"
-              key={game.title}
-            >
-              <div
-                className={`mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br ${game.accent} text-lg font-black text-slate-950 shadow-lg transition group-hover:rotate-3 group-hover:scale-105`}
-              >
-                {game.icon}
-              </div>
-              <h2 className="text-2xl font-bold">{game.title}</h2>
-              <p className="mt-3 text-sm leading-6 text-slate-300">
-                {game.description}
-              </p>
-            </article>
+            <GameCard game={game} key={game.title} />
           ))}
         </div>
       </section>
