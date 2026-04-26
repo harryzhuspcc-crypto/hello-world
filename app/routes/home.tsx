@@ -56,7 +56,7 @@ export default function Home() {
             </div>
 
             <h1 className="max-w-4xl text-6xl font-black tracking-tight text-white sm:text-7xl lg:text-8xl">
-              Harry's
+              Harry Zhu's
               <span className="block bg-gradient-to-r from-orange-200 via-white to-cyan-200 bg-clip-text text-transparent">
                 Game Center
               </span>
