@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Three Body Survival</title>
+    <script type="module" crossorigin src="assets/index-D8_ChiE7.js"></script>
+    <link rel="stylesheet" crossorigin href="assets/index-CmTXh-HD.css">
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="game-canvas" aria-label="Three Body Survival"></canvas>
+
+      <div class="hud">
+        <div class="hud__top">
+          <div class="card metric-card">
+            <div class="metric-card__label">Health</div>
+            <div class="meter"><div id="health-fill" class="meter__fill meter__fill--health"></div></div>
+            <div id="health-value" class="metric-card__value">100%</div>
+          </div>
+
+          <div class="card metric-card">
+            <div class="metric-card__label">Body Temp</div>
+            <div class="meter"><div id="temp-fill" class="meter__fill meter__fill--temp"></div></div>
+            <div id="temp-value" class="metric-card__value">37.0°C</div>
+          </div>
+
+          <div class="card metric-card">
+            <div class="metric-card__label">Hydration</div>
+            <div class="meter"><div id="hydration-fill" class="meter__fill meter__fill--hydration"></div></div>
+            <div id="hydration-value" class="metric-card__value">100%</div>
+          </div>
+
+          <div class="card info-card">
+            <span class="info-card__label">Condition</span>
+            <strong id="condition-value">Stable Window</strong>
+          </div>
+
+          <div class="card info-card">
+            <span class="info-card__label">Water</span>
+            <strong id="water-value">0 canisters</strong>
+          </div>
+
+          <div class="card info-card">
+            <span class="info-card__label">Survival Time</span>
+            <strong id="time-value">00:00</strong>
+          </div>
+
+          <div class="card lore-card">
+            <span class="info-card__label">Three-Body Brief</span>
+            <p id="briefing-value">
+              Three suns tug on one another, making long-term motion unstable. This prototype turns that chaos into survival phases.
+            </p>
+          </div>
+        </div>
+
+        <div id="status-pill" class="status-pill">Click Start Survival to begin.</div>
+        <div id="prompt-pill" class="prompt-pill hidden">Press E to collect water.</div>
+        <div id="crosshair" class="crosshair hidden"></div>
+      </div>
+
+      <div id="heat-vignette" class="feedback feedback--heat"></div>
+      <div id="cold-vignette" class="feedback feedback--cold"></div>
+      <div id="dry-vignette" class="feedback feedback--dry"></div>
+      <div id="flash-overlay" class="flash-overlay"></div>
+
+      <section id="menu-overlay" class="overlay overlay--visible">
+        <div class="overlay__card hero-card">
+          <div class="eyebrow">Unstable suns. Fragile body. Endless survival.</div>
+          <h1>Three Body Survival</h1>
+          <p>
+            Stranded on a planet trapped in a chaotic multi-sun system, your only goal is to stay alive.
+            Watch the sky, preserve your hydration, and sprint between rocks, houses, and shelter pods before the next shift hits.
+          </p>
+          <div class="controls-grid">
+            <div><span>Move</span><strong>W / A / S / D</strong></div>
+            <div><span>Look</span><strong>Mouse</strong></div>
+            <div><span>Sprint</span><strong>Shift</strong></div>
+            <div><span>Collect water</span><strong>E</strong></div>
+            <div><span>Drink water</span><strong>R</strong></div>
+            <div><span>Pause</span><strong>Esc</strong></div>
+          </div>
+          <div class="science-panel">
+            <div class="science-panel__header">What “three-body” means here</div>
+            <div class="science-grid">
+              <div>
+                <strong>Real idea</strong>
+                <p>
+                  In the three-body problem, three massive bodies all pull on each other. Unlike a simple two-body orbit,
+                  the long-term motion can become hard to predict.
+                </p>
+              </div>
+              <div>
+                <strong>How this game uses it</strong>
+                <p>
+                  Instead of simulating exact astrophysics, the game turns that instability into readable survival weather:
+                  Stable windows, chaotic transitions, scorching alignments, and dark freeze collapses.
+                </p>
+              </div>
+              <div>
+                <strong>What to watch</strong>
+                <p>
+                  If the sky grows hotter, get behind cover. If the light drops and the cold rushes in, get inside a house
+                  or shelter pod.
+                </p>
+              </div>
+            </div>
+          </div>
+          <button id="start-button" class="cta-button">Start Survival</button>
+        </div>
+      </section>
+
+      <section id="pause-overlay" class="overlay">
+        <div class="overlay__card overlay__card--small">
+          <div class="eyebrow">Paused</div>
+          <h2>Systems Holding</h2>
+          <p>Resume when you are ready to re-enter the unstable sky.</p>
+          <div class="overlay__actions">
+            <button id="resume-button" class="cta-button">Resume</button>
+            <button id="pause-restart-button" class="ghost-button">Restart Run</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="gameover-overlay" class="overlay">
+        <div class="overlay__card overlay__card--small">
+          <div class="eyebrow">Vitals lost</div>
+          <h2>Run Ended</h2>
+          <p id="gameover-text">You did not survive the chaotic cycle.</p>
+          <div class="overlay__actions">
+            <button id="restart-button" class="cta-button">Try Again</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  </body>
+</html>

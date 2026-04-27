@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { Link } from "react-router";
 
 import type { Route } from "./+types/tank-fight";
 import "../games/tank-game.css";
@@ -32,6 +33,12 @@ export default function TankFight() {
 
   return (
     <main className="tank-game-page">
+      <Link
+        className="fixed left-4 top-4 z-50 rounded-full border border-white/15 bg-black/35 px-4 py-2 text-sm font-bold uppercase tracking-[0.18em] text-white shadow-2xl backdrop-blur transition hover:bg-black/55"
+        to="/"
+      >
+        ← Lobby
+      </Link>
       <div className="tank-game-root">
         <canvas id="game-canvas" aria-label="Iron Plains Assault" />
         <div className="vignette" />

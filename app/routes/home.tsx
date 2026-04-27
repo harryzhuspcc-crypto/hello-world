@@ -42,6 +42,13 @@ const games: Game[] = [
     icon: "SA",
     href: "/sky-ace-infinite",
   },
+  {
+    title: "Three Body Survival",
+    description: "Survive chaotic suns, unstable weather, and a fragile body on an alien world.",
+    accent: "from-violet-300 to-fuchsia-500",
+    icon: "3B",
+    href: "/three-body-survival",
+  },
 ];
 
 const gameCardClass =
@@ -172,7 +179,7 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="mt-16 grid gap-5 md:grid-cols-3" id="games">
+        <div className="mt-16 grid gap-5 md:grid-cols-2 xl:grid-cols-4" id="games">
           {games.map((game) => (
             <GameCard game={game} key={game.title} />
           ))}
