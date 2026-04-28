@@ -92,9 +92,17 @@ export default function Home() {
           <span className="text-sm font-semibold uppercase tracking-[0.32em] text-orange-200">
             Arcade Cloud
           </span>
-          <span className="rounded-full bg-emerald-400/10 px-3 py-1 text-xs font-medium text-emerald-200 ring-1 ring-emerald-300/20">
-            Online
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="rounded-full bg-emerald-400/10 px-3 py-1 text-xs font-medium text-emerald-200 ring-1 ring-emerald-300/20">
+              Online
+            </span>
+            <Link
+              className="rounded-full bg-gradient-to-r from-amber-300 to-orange-400 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-slate-950 shadow-lg shadow-amber-500/20 transition hover:-translate-y-0.5 hover:from-amber-200 hover:to-orange-300"
+              to="/plus"
+            >
+              GET PLUS
+            </Link>
+          </div>
         </nav>
 
         <div className="grid items-center gap-12 lg:grid-cols-[1.1fr_0.9fr]">
