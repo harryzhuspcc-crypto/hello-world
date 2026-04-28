@@ -583,60 +583,139 @@ function TankPlus3DCanvas() {
     if (!mount) return;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x8fb1d6);
-    scene.fog = new THREE.Fog(0x8fb1d6, 35, 130);
-    const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 240);
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    scene.background = new THREE.Color(0xa7b987);
+    scene.fog = new THREE.Fog(0xa7b987, 70, 210);
+    const camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerHeight, 0.1, 320);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
     mount.appendChild(renderer.domElement);
 
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x445533, 1.2));
-    const sun = new THREE.DirectionalLight(0xfff0cc, 1.8);
-    sun.position.set(12, 24, 10);
+    scene.add(new THREE.HemisphereLight(0xece3c1, 0x4a5232, 1.18));
+    const sun = new THREE.DirectionalLight(0xfff2c6, 1.65);
+    sun.position.set(42, 55, 18);
     scene.add(sun);
+    const rim = new THREE.DirectionalLight(0xa6d0ff, 0.45);
+    rim.position.set(-18, 22, -30);
+    scene.add(rim);
 
-    const road = new THREE.Mesh(new THREE.BoxGeometry(22, 0.2, 180), new THREE.MeshStandardMaterial({ color: 0x4b4d52, roughness: 0.95 }));
-    road.position.z = -45;
-    scene.add(road);
-    const grass = new THREE.Mesh(new THREE.BoxGeometry(90, 0.15, 190), new THREE.MeshStandardMaterial({ color: 0x315d2d, roughness: 1 }));
-    grass.position.set(0, -0.12, -45);
-    scene.add(grass);
-    grass.renderOrder = -1;
+    const world = new THREE.Group();
+    scene.add(world);
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(130, 360, 36, 100), new THREE.MeshStandardMaterial({ color: 0x78935f, roughness: 0.98 }));
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.z = -115;
+    world.add(ground);
+    const road = new THREE.Mesh(new THREE.BoxGeometry(22, 0.12, 330), new THREE.MeshStandardMaterial({ color: 0x4b4d52, roughness: 0.95 }));
+    road.position.set(0, 0.02, -115);
+    world.add(road);
 
     const laneMarks: THREE.Mesh[] = [];
-    for (let i = 0; i < 18; i += 1) {
-      const mark = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.03, 4.5), new THREE.MeshBasicMaterial({ color: 0xf7d46b }));
-      mark.position.set(0, 0.02, 20 - i * 10);
-      scene.add(mark);
+    for (let i = 0; i < 34; i += 1) {
+      const mark = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.04, 4.4), new THREE.MeshBasicMaterial({ color: 0xf7d46b }));
+      mark.position.set(0, 0.11, 42 - i * 9.5);
+      world.add(mark);
       laneMarks.push(mark);
     }
 
+    const coverObjects: THREE.Mesh[] = [];
+    const rockMaterial = new THREE.MeshStandardMaterial({ color: 0x676956, roughness: 0.98 });
+    for (let i = 0; i < 32; i += 1) {
+      const side = i % 2 === 0 ? -1 : 1;
+      const rock = new THREE.Mesh(new THREE.BoxGeometry(THREE.MathUtils.randFloat(2.5, 5.8), THREE.MathUtils.randFloat(1.5, 3.8), THREE.MathUtils.randFloat(2.5, 5.8)), rockMaterial);
+      rock.position.set(side * THREE.MathUtils.randFloat(18, 44), rock.geometry.parameters.height / 2, 36 - i * 9.5 + THREE.MathUtils.randFloatSpread(4));
+      rock.rotation.set(THREE.MathUtils.randFloatSpread(0.15), Math.random() * Math.PI, THREE.MathUtils.randFloatSpread(0.15));
+      world.add(rock);
+      coverObjects.push(rock);
+    }
+
     const player = createTankMesh("player");
-    player.position.set(0, 0, 9);
+    player.position.set(0, 0, 34);
     scene.add(player);
 
     const actors: ThreeActor[] = [];
     const shots: ThreeShot[] = [];
-    const game = { stage: 1, hp: 130, maxHp: 130, progress: 0, stop: 0, cooldown: 0, message: "3D Stage 1: roll down the street" };
-    const stops = [180, 410, 660];
+    const game = {
+      stage: 1,
+      hp: 140,
+      maxHp: 140,
+      stop: 0,
+      cooldown: 0,
+      aimYaw: 0,
+      aimPitch: 0.08,
+      mouseDown: false,
+      message: "Drive forward. Click to lock aim. This is the run-through version of Tank Fight.",
+    };
+    const stopZ = [-42, -118, -220];
 
-    const spawnWave = () => {
-      const boss = game.stop === 2;
-      const count = boss ? 1 : 3 + Math.floor(game.stage * 0.6);
-      for (let i = 0; i < count; i += 1) {
-        const kind = boss ? "boss" : i % 3 === 0 ? "tank" : "infantry";
-        const mesh = kind === "infantry" ? createSoldierMesh() : createTankMesh(kind);
-        mesh.position.set(THREE.MathUtils.randFloat(-7, 7), 0, -55 - i * 5);
-        if (kind !== "infantry") mesh.rotation.y = Math.PI;
-        scene.add(mesh);
-        const hp = kind === "boss" ? 95 + game.stage * 18 : kind === "tank" ? 24 + game.stage * 4 : 7 + game.stage;
-        actors.push({ mesh, kind, hp, maxHp: hp, cooldown: 0.8, speed: kind === "boss" ? 0 : kind === "tank" ? 7 + game.stage * 0.4 : 10 + game.stage * 0.5 });
+    const clearActors = () => {
+      for (const actor of actors.splice(0)) {
+        scene.remove(actor.mesh);
+        disposeObject(actor.mesh);
       }
-      game.message = boss ? `3D Stage ${game.stage}: boss tank at the end!` : `3D ambush ${game.stop + 1}: clear the street`;
+      for (const shot of shots.splice(0)) {
+        scene.remove(shot.mesh);
+        shot.mesh.geometry.dispose();
+        (shot.mesh.material as THREE.Material).dispose();
+      }
+    };
+
+    const spawnActor = (kind: "infantry" | "tank" | "boss", x: number, z: number) => {
+      const mesh = kind === "infantry" ? createSoldierMesh() : createTankMesh(kind);
+      mesh.position.set(x, 0, z);
+      if (kind !== "infantry") mesh.rotation.y = Math.PI;
+      scene.add(mesh);
+      const hp = kind === "boss" ? 115 + game.stage * 22 : kind === "tank" ? 28 + game.stage * 5 : 8 + game.stage * 1.2;
+      actors.push({ mesh, kind, hp, maxHp: hp, cooldown: 0.65 + Math.random() * 0.7, speed: kind === "boss" ? 0 : kind === "tank" ? 5.6 + game.stage * 0.28 : 8.2 + game.stage * 0.35 });
+    };
+
+    const spawnEncounter = () => {
+      const boss = game.stop === 2;
+      const baseZ = stopZ[game.stop] - 22;
+      if (boss) {
+        spawnActor("boss", 0, baseZ - 8);
+        for (let i = 0; i < 4; i += 1) spawnActor(i % 2 === 0 ? "tank" : "infantry", THREE.MathUtils.randFloatSpread(14), baseZ + 8 + i * 4);
+        game.message = `Stage ${game.stage}: fortress boss tank. Same tank combat, but you must break through.`;
+      } else {
+        const count = 4 + Math.floor(game.stage * 0.65);
+        for (let i = 0; i < count; i += 1) spawnActor(i % 3 === 0 ? "tank" : "infantry", THREE.MathUtils.randFloatSpread(16), baseZ - i * 5);
+        game.message = `Stage ${game.stage}: street ambush ${game.stop + 1}. Stop and clear enemies to keep driving.`;
+      }
       game.stop += 1;
     };
+
+    const firePlayerShot = () => {
+      if (game.cooldown > 0 || game.stage > 12) return;
+      const origin = player.position.clone().add(new THREE.Vector3(Math.sin(game.aimYaw) * 1.7, 1.2, -Math.cos(game.aimYaw) * 2.9));
+      const direction = new THREE.Vector3(
+        Math.sin(game.aimYaw) * Math.cos(game.aimPitch),
+        Math.sin(game.aimPitch),
+        -Math.cos(game.aimYaw) * Math.cos(game.aimPitch),
+      ).normalize();
+      shots.push(makeShot(scene, origin, direction.multiplyScalar(58), "player", 16 + game.stage * 1.7));
+      game.cooldown = 0.28;
+    };
+
+    const handleMouseMove = (event: MouseEvent) => {
+      if (document.pointerLockElement !== renderer.domElement) return;
+      game.aimYaw -= event.movementX * 0.0048;
+      game.aimPitch = clamp(game.aimPitch - event.movementY * 0.0038, -0.45, 0.55);
+    };
+    const handleMouseDown = (event: MouseEvent) => {
+      if (document.pointerLockElement !== renderer.domElement) void renderer.domElement.requestPointerLock();
+      if (event.button === 0) {
+        game.mouseDown = true;
+        firePlayerShot();
+      }
+    };
+    const handleMouseUp = (event: MouseEvent) => {
+      if (event.button === 0) game.mouseDown = false;
+    };
+    renderer.domElement.addEventListener("mousedown", handleMouseDown);
+    window.addEventListener("mouseup", handleMouseUp);
+    document.addEventListener("mousemove", handleMouseMove);
 
     const clock = new THREE.Clock();
     let frame = 0;
@@ -650,44 +729,53 @@ function TankPlus3DCanvas() {
     const tick = () => {
       const dt = Math.min(clock.getDelta(), 0.033);
       const keys = keysRef.current;
+      game.cooldown = Math.max(0, game.cooldown - dt);
+
       if (game.stage <= 12) {
-        const lateral = (keys.has("KeyD") || keys.has("ArrowRight") ? 1 : 0) - (keys.has("KeyA") || keys.has("ArrowLeft") ? 1 : 0);
-        const forward = (keys.has("KeyS") || keys.has("ArrowDown") ? 1 : 0) - (keys.has("KeyW") || keys.has("ArrowUp") ? 1 : 0);
-        player.position.x = clamp(player.position.x + lateral * 12 * dt, -8, 8);
-        player.position.z = clamp(player.position.z + forward * 10 * dt, 4, 14);
-        game.cooldown = Math.max(0, game.cooldown - dt);
-        if ((keys.has("Space") || keys.has("KeyF")) && game.cooldown <= 0) {
-          shots.push(makeShot(scene, player.position.clone().add(new THREE.Vector3(0, 1.2, -2.8)), new THREE.Vector3(0, 0, -48), "player", 13 + game.stage * 1.5));
-          game.cooldown = 0.18;
+        const moveForward = (keys.has("KeyW") || keys.has("ArrowUp") ? 1 : 0) - (keys.has("KeyS") || keys.has("ArrowDown") ? 1 : 0);
+        const moveRight = (keys.has("KeyD") || keys.has("ArrowRight") ? 1 : 0) - (keys.has("KeyA") || keys.has("ArrowLeft") ? 1 : 0);
+        const forward = new THREE.Vector3(Math.sin(game.aimYaw), 0, -Math.cos(game.aimYaw));
+        const right = new THREE.Vector3(Math.cos(game.aimYaw), 0, Math.sin(game.aimYaw));
+        const move = new THREE.Vector3().addScaledVector(forward, moveForward).addScaledVector(right, moveRight);
+        if (move.lengthSq() > 1) move.normalize();
+        const oldZ = player.position.z;
+        player.position.addScaledVector(move, 13 * dt);
+        player.position.x = clamp(player.position.x, -10.2, 10.2);
+        player.position.z = clamp(player.position.z, -252, 38);
+        if (actors.length > 0 && game.stop > 0) {
+          const barrier = stopZ[game.stop - 1] - 4;
+          player.position.z = Math.max(player.position.z, barrier);
         }
-        if (actors.length === 0 && game.stop < stops.length) {
-          game.progress += (42 + game.stage * 2) * dt;
-          if (game.progress >= stops[game.stop]) spawnWave();
-        }
-        if (game.stop >= stops.length && actors.length === 0) {
+        player.rotation.y = game.aimYaw;
+        if ((keys.has("Space") || keys.has("KeyF") || game.mouseDown) && game.cooldown <= 0) firePlayerShot();
+        if (actors.length === 0 && game.stop < stopZ.length && oldZ > stopZ[game.stop] && player.position.z <= stopZ[game.stop]) spawnEncounter();
+        if (game.stop >= stopZ.length && actors.length === 0 && player.position.z <= -246) {
           game.stage += 1;
-          game.maxHp += 8;
-          Object.assign(game, { hp: game.maxHp, progress: 0, stop: 0, message: game.stage <= 12 ? `3D Stage ${game.stage}: advance` : "3D tank campaign complete" });
+          game.maxHp += 9;
+          Object.assign(game, { hp: game.maxHp, stop: 0, message: game.stage <= 12 ? `Stage ${game.stage}: keep rolling through the warzone.` : "Tank Plus 3D campaign complete." });
+          player.position.set(0, 0, 34);
         }
       }
 
       for (let i = actors.length - 1; i >= 0; i -= 1) {
         const actor = actors[i];
-        const toPlayer = player.position.clone().sub(actor.mesh.position);
+        const target = player.position.clone();
+        const toPlayer = target.sub(actor.mesh.position);
         toPlayer.y = 0;
         const dist = toPlayer.length() || 1;
         actor.mesh.lookAt(player.position.x, actor.mesh.position.y, player.position.z);
-        if (actor.kind !== "boss" || dist > 18) actor.mesh.position.addScaledVector(toPlayer.normalize(), actor.speed * dt);
+        if (actor.kind !== "boss" || dist > 17) actor.mesh.position.addScaledVector(toPlayer.normalize(), actor.speed * dt);
+        actor.mesh.position.x = clamp(actor.mesh.position.x, -11, 11);
         actor.cooldown -= dt;
         if (actor.cooldown <= 0) {
-          const dir = player.position.clone().add(new THREE.Vector3(0, 0.8, 0)).sub(actor.mesh.position).normalize();
-          shots.push(makeShot(scene, actor.mesh.position.clone().add(new THREE.Vector3(0, actor.kind === "infantry" ? 1 : 1.5, 0)), dir.multiplyScalar(actor.kind === "boss" ? 28 : 22), "enemy", actor.kind === "boss" ? 18 : actor.kind === "tank" ? 11 : 5));
+          const dir = player.position.clone().add(new THREE.Vector3(0, 0.9, 0)).sub(actor.mesh.position.clone().add(new THREE.Vector3(0, 1.1, 0))).normalize();
+          shots.push(makeShot(scene, actor.mesh.position.clone().add(new THREE.Vector3(0, actor.kind === "infantry" ? 1 : 1.5, 0)), dir.multiplyScalar(actor.kind === "boss" ? 30 : 24), "enemy", actor.kind === "boss" ? 18 : actor.kind === "tank" ? 12 : 5));
           if (actor.kind === "boss") {
-            for (let a = 0; a < Math.PI * 2; a += Math.PI / 4) shots.push(makeShot(scene, actor.mesh.position.clone().add(new THREE.Vector3(0, 1.8, 0)), new THREE.Vector3(Math.sin(a) * 22, 0, Math.cos(a) * 22), "enemy", 12));
+            for (let a = 0; a < Math.PI * 2; a += Math.PI / 4) shots.push(makeShot(scene, actor.mesh.position.clone().add(new THREE.Vector3(0, 2, 0)), new THREE.Vector3(Math.sin(a) * 25, 0, Math.cos(a) * 25), "enemy", 12));
           }
-          actor.cooldown = actor.kind === "boss" ? 0.9 : 1.35;
+          actor.cooldown = actor.kind === "boss" ? 0.95 : 1.25;
         }
-        if (dist < (actor.kind === "infantry" ? 1.6 : 2.8)) game.hp -= (actor.kind === "infantry" ? 16 : 24) * dt;
+        if (dist < (actor.kind === "infantry" ? 1.55 : actor.kind === "boss" ? 5.2 : 2.4)) game.hp -= (actor.kind === "infantry" ? 18 : 28) * dt;
         if (actor.hp <= 0) {
           scene.remove(actor.mesh);
           disposeObject(actor.mesh);
@@ -701,37 +789,37 @@ function TankPlus3DCanvas() {
         shot.mesh.position.addScaledVector(shot.velocity, dt);
         if (shot.owner === "player") {
           for (const actor of actors) {
-            if (shot.mesh.position.distanceTo(actor.mesh.position.clone().add(new THREE.Vector3(0, 1, 0))) < (actor.kind === "boss" ? 3.8 : 1.4)) {
+            if (shot.mesh.position.distanceTo(actor.mesh.position.clone().add(new THREE.Vector3(0, actor.kind === "boss" ? 2.1 : 0.9, 0))) < (actor.kind === "boss" ? 4.8 : 1.45)) {
               actor.hp -= shot.damage;
               shot.life = 0;
             }
           }
-        } else if (shot.mesh.position.distanceTo(player.position.clone().add(new THREE.Vector3(0, 0.8, 0))) < 1.5) {
+        } else if (shot.mesh.position.distanceTo(player.position.clone().add(new THREE.Vector3(0, 0.85, 0))) < 1.5) {
           game.hp -= shot.damage;
           shot.life = 0;
         }
-        if (shot.life <= 0) {
+        if (shot.life <= 0 || Math.abs(shot.mesh.position.x) > 90 || shot.mesh.position.z < -290 || shot.mesh.position.z > 80) {
           scene.remove(shot.mesh);
           shot.mesh.geometry.dispose();
           (shot.mesh.material as THREE.Material).dispose();
           shots.splice(i, 1);
         }
       }
+
       if (game.hp <= 0) {
-        for (const actor of actors.splice(0)) { scene.remove(actor.mesh); disposeObject(actor.mesh); }
-        for (const shot of shots.splice(0)) { scene.remove(shot.mesh); shot.mesh.geometry.dispose(); (shot.mesh.material as THREE.Material).dispose(); }
-        Object.assign(game, { hp: game.maxHp, progress: 0, stop: 0, message: `3D Stage ${game.stage} restarted` });
-        player.position.set(0, 0, 9);
+        clearActors();
+        Object.assign(game, { hp: game.maxHp, stop: 0, message: `Stage ${game.stage} restarted. Drive forward and break through.` });
+        player.position.set(0, 0, 34);
       }
 
-      for (const mark of laneMarks) {
-        mark.position.z += dt * (actors.length === 0 ? 18 : 0);
-        if (mark.position.z > 24) mark.position.z -= 180;
-      }
-      camera.position.set(player.position.x * 0.35, 9, 25);
-      camera.lookAt(player.position.x * 0.2, 0.8, -18);
+      const focus = player.position.clone().add(new THREE.Vector3(0, 1.35, 0));
+      const back = new THREE.Vector3(Math.sin(game.aimYaw), 0, -Math.cos(game.aimYaw)).multiplyScalar(-10.5);
+      camera.position.copy(focus).add(back);
+      camera.position.y += 5.2;
+      const look = focus.clone().add(new THREE.Vector3(Math.sin(game.aimYaw), Math.sin(game.aimPitch) + 0.08, -Math.cos(game.aimYaw)).multiplyScalar(28));
+      camera.lookAt(look);
       renderer.render(scene, camera);
-      if (hudRef.current) hudRef.current.textContent = `Tank Plus 3D • Stage ${Math.min(game.stage, 12)} / 12 • Hull ${Math.max(0, Math.round(game.hp))} • ${game.message} • WASD move • Space/F fire`;
+      if (hudRef.current) hudRef.current.textContent = `Tank Plus 3D Run • Stage ${Math.min(game.stage, 12)} / 12 • Hull ${Math.max(0, Math.round(game.hp))} • ${game.message} • Click to lock mouse • WASD drive • Mouse aim • LMB/Space fire`;
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
@@ -739,15 +827,19 @@ function TankPlus3DCanvas() {
     return () => {
       cancelAnimationFrame(frame);
       window.removeEventListener("resize", resize);
+      renderer.domElement.removeEventListener("mousedown", handleMouseDown);
+      window.removeEventListener("mouseup", handleMouseUp);
+      document.removeEventListener("mousemove", handleMouseMove);
+      if (document.pointerLockElement === renderer.domElement) document.exitPointerLock();
+      clearActors();
       renderer.dispose();
       mount.removeChild(renderer.domElement);
       disposeObject(scene);
     };
   }, [keysRef]);
 
-  return <><div ref={mountRef} className="h-full w-full" /><div ref={hudRef} className="absolute bottom-6 left-6 z-40 rounded-3xl border border-white/10 bg-black/55 px-5 py-4 text-sm font-bold text-white shadow-2xl backdrop-blur" /></>;
+  return <><div ref={mountRef} className="h-full w-full" /><div ref={hudRef} className="absolute bottom-6 left-6 right-6 z-40 rounded-3xl border border-white/10 bg-black/55 px-5 py-4 text-sm font-bold text-white shadow-2xl backdrop-blur" /></>;
 }
-
 function PlanePlus3DCanvas() {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const hudRef = useRef<HTMLDivElement | null>(null);
