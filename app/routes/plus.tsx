@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
+import * as THREE from "three";
 
 import type { Route } from "./+types/plus";
 
@@ -92,7 +93,19 @@ function useCanvasLoop(
   }, deps);
 }
 
-function PlusShell({ title, subtitle, children, onMenu }: { title: string; subtitle: string; children: React.ReactNode; onMenu: () => void }) {
+function PlusShell({
+  title,
+  subtitle,
+  children,
+  onMenu,
+  modeAction,
+}: {
+  title: string;
+  subtitle: string;
+  children: React.ReactNode;
+  onMenu: () => void;
+  modeAction?: React.ReactNode;
+}) {
   return (
     <main className="relative h-screen w-screen overflow-hidden bg-slate-950 text-white">
       <div className="absolute left-4 top-4 z-50 flex gap-3">
@@ -109,6 +122,7 @@ function PlusShell({ title, subtitle, children, onMenu }: { title: string; subti
         >
           Lobby
         </Link>
+        {modeAction}
       </div>
       <div className="absolute right-4 top-4 z-50 rounded-3xl border border-amber-200/25 bg-black/45 px-5 py-3 text-right shadow-2xl backdrop-blur">
         <div className="text-xs font-black uppercase tracking-[0.22em] text-amber-200">GET PLUS</div>
@@ -120,7 +134,7 @@ function PlusShell({ title, subtitle, children, onMenu }: { title: string; subti
   );
 }
 
-function TankPlusGame({ onMenu }: { onMenu: () => void }) {
+function TankPlus2DGame({ onMenu, on3d }: { onMenu: () => void; on3d?: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stateRef = useRef({
     stage: 1,
@@ -321,10 +335,10 @@ function TankPlusGame({ onMenu }: { onMenu: () => void }) {
     ctx.fillRect(20, 82, 220 * (s.hp / s.maxHp), 16);
   }, []);
 
-  return <PlusShell title="Tank Campaign" subtitle="12 street stages" onMenu={onMenu}><canvas ref={canvasRef} /></PlusShell>;
+  return <PlusShell title="Tank Campaign 2D" subtitle="classic flat street version" onMenu={onMenu} modeAction={on3d ? <button className="rounded-full border border-cyan-200/25 bg-cyan-300/15 px-4 py-2 text-sm font-bold uppercase tracking-[0.18em] text-cyan-100 shadow-2xl backdrop-blur transition hover:bg-cyan-300/25" onClick={on3d} type="button">3D Version</button> : undefined}><canvas ref={canvasRef} /></PlusShell>;
 }
 
-function PlanePlusGame({ onMenu }: { onMenu: () => void }) {
+function PlanePlus2DGame({ onMenu, on3d }: { onMenu: () => void; on3d?: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stateRef = useRef({ stage: 1, hp: 100, maxHp: 100, x: 120, y: 320, distance: 0, enemies: [] as PlaneEnemy[], shots: [] as Shot[], cooldown: 0, bossSpawned: false, message: "Stage 1 takeoff" });
 
@@ -436,7 +450,503 @@ function PlanePlusGame({ onMenu }: { onMenu: () => void }) {
     ctx.fillStyle = "#ff5757"; ctx.fillRect(20, 82, 220, 16); ctx.fillStyle = "#72ff82"; ctx.fillRect(20, 82, 220 * (s.hp / s.maxHp), 16);
   }, []);
 
-  return <PlusShell title="Plane Campaign" subtitle="12 boss-plane sorties" onMenu={onMenu}><canvas ref={canvasRef} /></PlusShell>;
+  return <PlusShell title="Plane Campaign 2D" subtitle="classic flat sky version" onMenu={onMenu} modeAction={on3d ? <button className="rounded-full border border-cyan-200/25 bg-cyan-300/15 px-4 py-2 text-sm font-bold uppercase tracking-[0.18em] text-cyan-100 shadow-2xl backdrop-blur transition hover:bg-cyan-300/25" onClick={on3d} type="button">3D Version</button> : undefined}><canvas ref={canvasRef} /></PlusShell>;
+}
+
+
+type ThreeActor = {
+  mesh: THREE.Object3D;
+  kind: "infantry" | "tank" | "boss" | "fighter" | "bomber";
+  hp: number;
+  maxHp: number;
+  cooldown: number;
+  speed: number;
+};
+
+type ThreeShot = {
+  mesh: THREE.Mesh;
+  velocity: THREE.Vector3;
+  damage: number;
+  owner: "player" | "enemy";
+  life: number;
+};
+
+function disposeObject(object: THREE.Object3D) {
+  object.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (mesh.geometry) mesh.geometry.dispose();
+    const material = mesh.material;
+    if (Array.isArray(material)) material.forEach((entry) => entry.dispose());
+    else material?.dispose?.();
+  });
+}
+
+function useKeyTracker() {
+  const keysRef = useRef<Keys>(new Set());
+  useEffect(() => {
+    const down = (event: KeyboardEvent) => {
+      keysRef.current.add(event.code);
+      if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.code)) event.preventDefault();
+    };
+    const up = (event: KeyboardEvent) => keysRef.current.delete(event.code);
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+    };
+  }, []);
+  return keysRef;
+}
+
+function createTankMesh(kind: "player" | "tank" | "boss") {
+  const group = new THREE.Group();
+  const scale = kind === "boss" ? 2.2 : 1;
+  const hull = new THREE.Mesh(
+    new THREE.BoxGeometry(2.2 * scale, 0.8 * scale, 3.3 * scale),
+    new THREE.MeshStandardMaterial({ color: kind === "player" ? 0x5d7f43 : kind === "boss" ? 0x3f4240 : 0x8f6346, roughness: 0.85 }),
+  );
+  hull.position.y = 0.55 * scale;
+  group.add(hull);
+  const turret = new THREE.Mesh(
+    new THREE.BoxGeometry(1.3 * scale, 0.55 * scale, 1.4 * scale),
+    new THREE.MeshStandardMaterial({ color: kind === "player" ? 0x78925a : kind === "boss" ? 0x6e5845 : 0x6f4c34, roughness: 0.8 }),
+  );
+  turret.position.y = 1.15 * scale;
+  group.add(turret);
+  const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.24 * scale, 0.24 * scale, 2.6 * scale), new THREE.MeshStandardMaterial({ color: 0x20251d }));
+  barrel.position.set(0, 1.15 * scale, -1.9 * scale);
+  group.add(barrel);
+  const trackMaterial = new THREE.MeshStandardMaterial({ color: 0x20231e, roughness: 0.9 });
+  for (const x of [-1.25 * scale, 1.25 * scale]) {
+    const track = new THREE.Mesh(new THREE.BoxGeometry(0.38 * scale, 0.45 * scale, 3.6 * scale), trackMaterial);
+    track.position.set(x, 0.36 * scale, 0);
+    group.add(track);
+  }
+  if (kind === "boss") {
+    const cannonMaterial = new THREE.MeshStandardMaterial({ color: 0x151819 });
+    for (let index = 0; index < 8; index += 1) {
+      const angle = (index / 8) * Math.PI * 2;
+      const cannon = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 3.8), cannonMaterial);
+      cannon.position.set(Math.sin(angle) * 3.4, 1.8, Math.cos(angle) * 3.4);
+      cannon.rotation.y = angle;
+      group.add(cannon);
+    }
+  }
+  return group;
+}
+
+function createSoldierMesh() {
+  const group = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.45, 1.0, 0.32), new THREE.MeshStandardMaterial({ color: 0xb98b57 }));
+  body.position.y = 0.7;
+  group.add(body);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 12), new THREE.MeshStandardMaterial({ color: 0x2c3428 }));
+  head.position.y = 1.35;
+  group.add(head);
+  const rifle = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.9), new THREE.MeshBasicMaterial({ color: 0xffcf7a }));
+  rifle.position.set(0.32, 0.9, -0.42);
+  group.add(rifle);
+  return group;
+}
+
+function createPlaneMesh(kind: "player" | "fighter" | "bomber" | "boss") {
+  const group = new THREE.Group();
+  const scale = kind === "boss" ? 2.1 : kind === "bomber" ? 1.35 : 1;
+  const bodyColor = kind === "player" ? 0xf3f7ff : kind === "boss" ? 0x66277d : kind === "bomber" ? 0x7e4f4f : 0x283a66;
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.8 * scale, 0.55 * scale, 3.2 * scale), new THREE.MeshStandardMaterial({ color: bodyColor, roughness: 0.5, metalness: 0.25 }));
+  group.add(body);
+  const wing = new THREE.Mesh(new THREE.BoxGeometry(5.0 * scale, 0.16 * scale, 1.0 * scale), new THREE.MeshStandardMaterial({ color: bodyColor, roughness: 0.55, metalness: 0.2 }));
+  wing.position.z = 0.15 * scale;
+  group.add(wing);
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.4 * scale, 0.95 * scale, 14), new THREE.MeshBasicMaterial({ color: kind === "player" ? 0x3887ff : 0xff7d61 }));
+  nose.rotation.x = -Math.PI / 2;
+  nose.position.z = -2.0 * scale;
+  group.add(nose);
+  return group;
+}
+
+function makeShot(scene: THREE.Scene, origin: THREE.Vector3, velocity: THREE.Vector3, owner: "player" | "enemy", damage: number) {
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(owner === "player" ? 0.18 : 0.24, 12, 12), new THREE.MeshBasicMaterial({ color: owner === "player" ? 0xfff06d : 0xff7555 }));
+  mesh.position.copy(origin);
+  scene.add(mesh);
+  return { mesh, velocity, owner, damage, life: 4 } satisfies ThreeShot;
+}
+
+function TankPlus3DCanvas() {
+  const mountRef = useRef<HTMLDivElement | null>(null);
+  const hudRef = useRef<HTMLDivElement | null>(null);
+  const keysRef = useKeyTracker();
+
+  useEffect(() => {
+    const mount = mountRef.current;
+    if (!mount) return;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x8fb1d6);
+    scene.fog = new THREE.Fog(0x8fb1d6, 35, 130);
+    const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 240);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    mount.appendChild(renderer.domElement);
+
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x445533, 1.2));
+    const sun = new THREE.DirectionalLight(0xfff0cc, 1.8);
+    sun.position.set(12, 24, 10);
+    scene.add(sun);
+
+    const road = new THREE.Mesh(new THREE.BoxGeometry(22, 0.2, 180), new THREE.MeshStandardMaterial({ color: 0x4b4d52, roughness: 0.95 }));
+    road.position.z = -45;
+    scene.add(road);
+    const grass = new THREE.Mesh(new THREE.BoxGeometry(90, 0.15, 190), new THREE.MeshStandardMaterial({ color: 0x315d2d, roughness: 1 }));
+    grass.position.set(0, -0.12, -45);
+    scene.add(grass);
+    grass.renderOrder = -1;
+
+    const laneMarks: THREE.Mesh[] = [];
+    for (let i = 0; i < 18; i += 1) {
+      const mark = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.03, 4.5), new THREE.MeshBasicMaterial({ color: 0xf7d46b }));
+      mark.position.set(0, 0.02, 20 - i * 10);
+      scene.add(mark);
+      laneMarks.push(mark);
+    }
+
+    const player = createTankMesh("player");
+    player.position.set(0, 0, 9);
+    scene.add(player);
+
+    const actors: ThreeActor[] = [];
+    const shots: ThreeShot[] = [];
+    const game = { stage: 1, hp: 130, maxHp: 130, progress: 0, stop: 0, cooldown: 0, message: "3D Stage 1: roll down the street" };
+    const stops = [180, 410, 660];
+
+    const spawnWave = () => {
+      const boss = game.stop === 2;
+      const count = boss ? 1 : 3 + Math.floor(game.stage * 0.6);
+      for (let i = 0; i < count; i += 1) {
+        const kind = boss ? "boss" : i % 3 === 0 ? "tank" : "infantry";
+        const mesh = kind === "infantry" ? createSoldierMesh() : createTankMesh(kind);
+        mesh.position.set(THREE.MathUtils.randFloat(-7, 7), 0, -55 - i * 5);
+        if (kind !== "infantry") mesh.rotation.y = Math.PI;
+        scene.add(mesh);
+        const hp = kind === "boss" ? 95 + game.stage * 18 : kind === "tank" ? 24 + game.stage * 4 : 7 + game.stage;
+        actors.push({ mesh, kind, hp, maxHp: hp, cooldown: 0.8, speed: kind === "boss" ? 0 : kind === "tank" ? 7 + game.stage * 0.4 : 10 + game.stage * 0.5 });
+      }
+      game.message = boss ? `3D Stage ${game.stage}: boss tank at the end!` : `3D ambush ${game.stop + 1}: clear the street`;
+      game.stop += 1;
+    };
+
+    const clock = new THREE.Clock();
+    let frame = 0;
+    const resize = () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    };
+    window.addEventListener("resize", resize);
+
+    const tick = () => {
+      const dt = Math.min(clock.getDelta(), 0.033);
+      const keys = keysRef.current;
+      if (game.stage <= 12) {
+        const lateral = (keys.has("KeyD") || keys.has("ArrowRight") ? 1 : 0) - (keys.has("KeyA") || keys.has("ArrowLeft") ? 1 : 0);
+        const forward = (keys.has("KeyS") || keys.has("ArrowDown") ? 1 : 0) - (keys.has("KeyW") || keys.has("ArrowUp") ? 1 : 0);
+        player.position.x = clamp(player.position.x + lateral * 12 * dt, -8, 8);
+        player.position.z = clamp(player.position.z + forward * 10 * dt, 4, 14);
+        game.cooldown = Math.max(0, game.cooldown - dt);
+        if ((keys.has("Space") || keys.has("KeyF")) && game.cooldown <= 0) {
+          shots.push(makeShot(scene, player.position.clone().add(new THREE.Vector3(0, 1.2, -2.8)), new THREE.Vector3(0, 0, -48), "player", 13 + game.stage * 1.5));
+          game.cooldown = 0.18;
+        }
+        if (actors.length === 0 && game.stop < stops.length) {
+          game.progress += (42 + game.stage * 2) * dt;
+          if (game.progress >= stops[game.stop]) spawnWave();
+        }
+        if (game.stop >= stops.length && actors.length === 0) {
+          game.stage += 1;
+          game.maxHp += 8;
+          Object.assign(game, { hp: game.maxHp, progress: 0, stop: 0, message: game.stage <= 12 ? `3D Stage ${game.stage}: advance` : "3D tank campaign complete" });
+        }
+      }
+
+      for (let i = actors.length - 1; i >= 0; i -= 1) {
+        const actor = actors[i];
+        const toPlayer = player.position.clone().sub(actor.mesh.position);
+        toPlayer.y = 0;
+        const dist = toPlayer.length() || 1;
+        actor.mesh.lookAt(player.position.x, actor.mesh.position.y, player.position.z);
+        if (actor.kind !== "boss" || dist > 18) actor.mesh.position.addScaledVector(toPlayer.normalize(), actor.speed * dt);
+        actor.cooldown -= dt;
+        if (actor.cooldown <= 0) {
+          const dir = player.position.clone().add(new THREE.Vector3(0, 0.8, 0)).sub(actor.mesh.position).normalize();
+          shots.push(makeShot(scene, actor.mesh.position.clone().add(new THREE.Vector3(0, actor.kind === "infantry" ? 1 : 1.5, 0)), dir.multiplyScalar(actor.kind === "boss" ? 28 : 22), "enemy", actor.kind === "boss" ? 18 : actor.kind === "tank" ? 11 : 5));
+          if (actor.kind === "boss") {
+            for (let a = 0; a < Math.PI * 2; a += Math.PI / 4) shots.push(makeShot(scene, actor.mesh.position.clone().add(new THREE.Vector3(0, 1.8, 0)), new THREE.Vector3(Math.sin(a) * 22, 0, Math.cos(a) * 22), "enemy", 12));
+          }
+          actor.cooldown = actor.kind === "boss" ? 0.9 : 1.35;
+        }
+        if (dist < (actor.kind === "infantry" ? 1.6 : 2.8)) game.hp -= (actor.kind === "infantry" ? 16 : 24) * dt;
+        if (actor.hp <= 0) {
+          scene.remove(actor.mesh);
+          disposeObject(actor.mesh);
+          actors.splice(i, 1);
+        }
+      }
+
+      for (let i = shots.length - 1; i >= 0; i -= 1) {
+        const shot = shots[i];
+        shot.life -= dt;
+        shot.mesh.position.addScaledVector(shot.velocity, dt);
+        if (shot.owner === "player") {
+          for (const actor of actors) {
+            if (shot.mesh.position.distanceTo(actor.mesh.position.clone().add(new THREE.Vector3(0, 1, 0))) < (actor.kind === "boss" ? 3.8 : 1.4)) {
+              actor.hp -= shot.damage;
+              shot.life = 0;
+            }
+          }
+        } else if (shot.mesh.position.distanceTo(player.position.clone().add(new THREE.Vector3(0, 0.8, 0))) < 1.5) {
+          game.hp -= shot.damage;
+          shot.life = 0;
+        }
+        if (shot.life <= 0) {
+          scene.remove(shot.mesh);
+          shot.mesh.geometry.dispose();
+          (shot.mesh.material as THREE.Material).dispose();
+          shots.splice(i, 1);
+        }
+      }
+      if (game.hp <= 0) {
+        for (const actor of actors.splice(0)) { scene.remove(actor.mesh); disposeObject(actor.mesh); }
+        for (const shot of shots.splice(0)) { scene.remove(shot.mesh); shot.mesh.geometry.dispose(); (shot.mesh.material as THREE.Material).dispose(); }
+        Object.assign(game, { hp: game.maxHp, progress: 0, stop: 0, message: `3D Stage ${game.stage} restarted` });
+        player.position.set(0, 0, 9);
+      }
+
+      for (const mark of laneMarks) {
+        mark.position.z += dt * (actors.length === 0 ? 18 : 0);
+        if (mark.position.z > 24) mark.position.z -= 180;
+      }
+      camera.position.set(player.position.x * 0.35, 9, 25);
+      camera.lookAt(player.position.x * 0.2, 0.8, -18);
+      renderer.render(scene, camera);
+      if (hudRef.current) hudRef.current.textContent = `Tank Plus 3D • Stage ${Math.min(game.stage, 12)} / 12 • Hull ${Math.max(0, Math.round(game.hp))} • ${game.message} • WASD move • Space/F fire`;
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("resize", resize);
+      renderer.dispose();
+      mount.removeChild(renderer.domElement);
+      disposeObject(scene);
+    };
+  }, [keysRef]);
+
+  return <><div ref={mountRef} className="h-full w-full" /><div ref={hudRef} className="absolute bottom-6 left-6 z-40 rounded-3xl border border-white/10 bg-black/55 px-5 py-4 text-sm font-bold text-white shadow-2xl backdrop-blur" /></>;
+}
+
+function PlanePlus3DCanvas() {
+  const mountRef = useRef<HTMLDivElement | null>(null);
+  const hudRef = useRef<HTMLDivElement | null>(null);
+  const keysRef = useKeyTracker();
+
+  useEffect(() => {
+    const mount = mountRef.current;
+    if (!mount) return;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x6dd6ff);
+    scene.fog = new THREE.Fog(0x6dd6ff, 50, 190);
+    const camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerHeight, 0.1, 260);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    mount.appendChild(renderer.domElement);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x385e9a, 1.35));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.4);
+    sun.position.set(12, 18, 16);
+    scene.add(sun);
+
+    const clouds: THREE.Mesh[] = [];
+    for (let i = 0; i < 26; i += 1) {
+      const cloud = new THREE.Mesh(new THREE.SphereGeometry(THREE.MathUtils.randFloat(1.4, 3.2), 12, 8), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.72 }));
+      cloud.scale.set(2.4, 0.45, 1);
+      cloud.position.set(THREE.MathUtils.randFloatSpread(70), THREE.MathUtils.randFloat(-12, 14), THREE.MathUtils.randFloat(-130, 30));
+      scene.add(cloud);
+      clouds.push(cloud);
+    }
+
+    const player = createPlaneMesh("player");
+    player.position.set(0, 0, 10);
+    scene.add(player);
+    const actors: ThreeActor[] = [];
+    const shots: ThreeShot[] = [];
+    const game = { stage: 1, hp: 110, maxHp: 110, distance: 0, cooldown: 0, bossSpawned: false, message: "3D sortie 1: fly the lane" };
+
+    const clock = new THREE.Clock();
+    let frame = 0;
+    const resize = () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    };
+    window.addEventListener("resize", resize);
+
+    const spawnEnemy = (boss = false) => {
+      const kind = boss ? "boss" : Math.random() < 0.28 ? "bomber" : "fighter";
+      const mesh = createPlaneMesh(kind);
+      mesh.position.set(THREE.MathUtils.randFloat(-14, 14), THREE.MathUtils.randFloat(-8, 8), -95);
+      mesh.rotation.y = Math.PI;
+      scene.add(mesh);
+      const hp = kind === "boss" ? 100 + game.stage * 18 : kind === "bomber" ? 30 + game.stage * 3 : 14 + game.stage * 2;
+      actors.push({ mesh, kind, hp, maxHp: hp, cooldown: 0.7, speed: kind === "boss" ? 0 : 22 + game.stage * 1.6 });
+      if (boss) game.message = `3D Stage ${game.stage}: boss plane ahead!`;
+    };
+
+    const tick = () => {
+      const dt = Math.min(clock.getDelta(), 0.033);
+      const keys = keysRef.current;
+      if (game.stage <= 12) {
+        const lateral = (keys.has("KeyD") || keys.has("ArrowRight") ? 1 : 0) - (keys.has("KeyA") || keys.has("ArrowLeft") ? 1 : 0);
+        const vertical = (keys.has("KeyW") || keys.has("ArrowUp") ? 1 : 0) - (keys.has("KeyS") || keys.has("ArrowDown") ? 1 : 0);
+        player.position.x = clamp(player.position.x + lateral * 16 * dt, -15, 15);
+        player.position.y = clamp(player.position.y + vertical * 12 * dt, -9, 10);
+        player.rotation.z = THREE.MathUtils.lerp(player.rotation.z, -lateral * 0.35, dt * 6);
+        player.rotation.x = THREE.MathUtils.lerp(player.rotation.x, vertical * 0.18, dt * 6);
+        game.distance += (50 + game.stage * 2) * dt;
+        game.cooldown = Math.max(0, game.cooldown - dt);
+        if ((keys.has("Space") || keys.has("KeyF")) && game.cooldown <= 0) {
+          shots.push(makeShot(scene, player.position.clone().add(new THREE.Vector3(0, 0, -2.7)), new THREE.Vector3(0, 0, -70), "player", 11 + game.stage * 1.2));
+          game.cooldown = 0.12;
+        }
+        if (!game.bossSpawned && game.distance < 820 && Math.random() < dt * (1.0 + game.stage * 0.08)) spawnEnemy(false);
+        if (!game.bossSpawned && game.distance >= 820) {
+          game.bossSpawned = true;
+          spawnEnemy(true);
+        }
+        if (game.bossSpawned && actors.length === 0) {
+          game.stage += 1;
+          game.maxHp += 8;
+          Object.assign(game, { hp: game.maxHp, distance: 0, bossSpawned: false, message: game.stage <= 12 ? `3D sortie ${game.stage}: next stage` : "3D plane campaign complete" });
+        }
+      }
+
+      for (let i = actors.length - 1; i >= 0; i -= 1) {
+        const actor = actors[i];
+        if (actor.kind === "boss") {
+          actor.mesh.position.x = Math.sin(clock.elapsedTime * 0.9) * 10;
+          actor.mesh.position.y = Math.sin(clock.elapsedTime * 1.4) * 4;
+        } else {
+          actor.mesh.position.z += actor.speed * dt;
+          actor.mesh.position.x += Math.sin(clock.elapsedTime * 2 + i) * dt * 4;
+        }
+        actor.mesh.lookAt(player.position);
+        actor.cooldown -= dt;
+        if (actor.cooldown <= 0) {
+          const dir = player.position.clone().sub(actor.mesh.position).normalize();
+          shots.push(makeShot(scene, actor.mesh.position.clone(), dir.multiplyScalar(actor.kind === "boss" ? 35 : 28), "enemy", actor.kind === "boss" ? 14 : 8));
+          if (actor.kind === "boss") {
+            shots.push(makeShot(scene, actor.mesh.position.clone().add(new THREE.Vector3(2, 0, 0)), new THREE.Vector3(0.8, 0, 1).normalize().multiplyScalar(32), "enemy", 10));
+            shots.push(makeShot(scene, actor.mesh.position.clone().add(new THREE.Vector3(-2, 0, 0)), new THREE.Vector3(-0.8, 0, 1).normalize().multiplyScalar(32), "enemy", 10));
+          }
+          actor.cooldown = actor.kind === "boss" ? 0.55 : 1.2;
+        }
+        if (actor.mesh.position.distanceTo(player.position) < (actor.kind === "boss" ? 4.8 : 2.4)) {
+          game.hp -= actor.kind === "boss" ? 20 : 12;
+          actor.hp = 0;
+        }
+        if (actor.hp <= 0 || actor.mesh.position.z > 24) {
+          scene.remove(actor.mesh);
+          disposeObject(actor.mesh);
+          actors.splice(i, 1);
+        }
+      }
+
+      for (let i = shots.length - 1; i >= 0; i -= 1) {
+        const shot = shots[i];
+        shot.life -= dt;
+        shot.mesh.position.addScaledVector(shot.velocity, dt);
+        if (shot.owner === "player") {
+          for (const actor of actors) {
+            if (shot.mesh.position.distanceTo(actor.mesh.position) < (actor.kind === "boss" ? 4 : 1.8)) {
+              actor.hp -= shot.damage;
+              shot.life = 0;
+            }
+          }
+        } else if (shot.mesh.position.distanceTo(player.position) < 1.5) {
+          game.hp -= shot.damage;
+          shot.life = 0;
+        }
+        if (shot.life <= 0) {
+          scene.remove(shot.mesh);
+          shot.mesh.geometry.dispose();
+          (shot.mesh.material as THREE.Material).dispose();
+          shots.splice(i, 1);
+        }
+      }
+      if (game.hp <= 0) {
+        for (const actor of actors.splice(0)) { scene.remove(actor.mesh); disposeObject(actor.mesh); }
+        for (const shot of shots.splice(0)) { scene.remove(shot.mesh); shot.mesh.geometry.dispose(); (shot.mesh.material as THREE.Material).dispose(); }
+        Object.assign(game, { hp: game.maxHp, distance: 0, bossSpawned: false, message: `3D Stage ${game.stage} restarted` });
+        player.position.set(0, 0, 10);
+      }
+
+      for (const cloud of clouds) {
+        cloud.position.z += dt * 24;
+        if (cloud.position.z > 35) cloud.position.z = -135;
+      }
+      camera.position.set(player.position.x * 0.35, player.position.y + 5, 25);
+      camera.lookAt(player.position.x * 0.2, player.position.y * 0.2, -24);
+      renderer.render(scene, camera);
+      if (hudRef.current) hudRef.current.textContent = `Plane Plus 3D • Stage ${Math.min(game.stage, 12)} / 12 • Hull ${Math.max(0, Math.round(game.hp))} • ${game.message} • WASD fly • Space/F fire`;
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("resize", resize);
+      renderer.dispose();
+      mount.removeChild(renderer.domElement);
+      disposeObject(scene);
+    };
+  }, [keysRef]);
+
+  return <><div ref={mountRef} className="h-full w-full" /><div ref={hudRef} className="absolute bottom-6 left-6 z-40 rounded-3xl border border-white/10 bg-black/55 px-5 py-4 text-sm font-bold text-white shadow-2xl backdrop-blur" /></>;
+}
+
+function TankPlusGame({ onMenu }: { onMenu: () => void }) {
+  const [mode, setMode] = useState<"3d" | "2d">("3d");
+  if (mode === "2d") return <TankPlus2DGame onMenu={onMenu} on3d={() => setMode("3d")} />;
+  return (
+    <PlusShell
+      title="Tank Campaign 3D"
+      subtitle="12 street stages + 2D version available"
+      onMenu={onMenu}
+      modeAction={<button className="rounded-full border border-amber-200/25 bg-amber-300/15 px-4 py-2 text-sm font-bold uppercase tracking-[0.18em] text-amber-100 shadow-2xl backdrop-blur transition hover:bg-amber-300/25" onClick={() => setMode("2d")} type="button">2D Version</button>}
+    >
+      <TankPlus3DCanvas />
+    </PlusShell>
+  );
+}
+
+function PlanePlusGame({ onMenu }: { onMenu: () => void }) {
+  const [mode, setMode] = useState<"3d" | "2d">("3d");
+  if (mode === "2d") return <PlanePlus2DGame onMenu={onMenu} on3d={() => setMode("3d")} />;
+  return (
+    <PlusShell
+      title="Plane Campaign 3D"
+      subtitle="12 boss-plane sorties + 2D version available"
+      onMenu={onMenu}
+      modeAction={<button className="rounded-full border border-amber-200/25 bg-amber-300/15 px-4 py-2 text-sm font-bold uppercase tracking-[0.18em] text-amber-100 shadow-2xl backdrop-blur transition hover:bg-amber-300/25" onClick={() => setMode("2d")} type="button">2D Version</button>}
+    >
+      <PlanePlus3DCanvas />
+    </PlusShell>
+  );
 }
 
 function createMarioStage(stage: number) {
