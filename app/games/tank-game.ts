@@ -1323,6 +1323,9 @@ export class TankGame {
 
     const id = this.nextEnemyId++;
     visual.root.userData.enemyId = id;
+    const bossWaveIndex = Math.max(1, Math.floor(this.currentWave / 10));
+    const bossRequiredShots = bossWaveIndex * 20;
+    const bossHealth = (12 + this.playerDamage * 2 + this.chargeDamageBonus * 2) * bossRequiredShots;
 
     this.enemies.push({
       id,
@@ -1335,7 +1338,7 @@ export class TankGame {
       sideDoors: visual.sideDoors,
       rearDoor: visual.rearDoor,
       speed: 2.35 + Math.min(this.currentWave * 0.08, 1.4),
-      health: 56 + this.currentWave * 6,
+      health: bossHealth,
       fireCooldown: 1.5,
       desiredRange: 30,
       turnSpeed: 0.72,

@@ -37,6 +37,10 @@ function overlap(a: Rect, b: Rect) {
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 }
 
+function bossRequiredShots(stage: number) {
+  return Math.max(20, stage * 20);
+}
+
 function useCanvasLoop(
   canvasRef: React.RefObject<HTMLCanvasElement | null>,
   run: (ctx: CanvasRenderingContext2D, width: number, height: number, dt: number, keys: Keys) => void,
@@ -183,7 +187,8 @@ function TankPlus2DGame({ onMenu, on3d }: { onMenu: () => void; on3d?: () => voi
         s.enemies = [];
         for (let i = 0; i < count; i += 1) {
           if (bossStop) {
-            s.enemies.push({ x: w - 210, y: roadMid - 62, w: 132, h: 124, kind: "boss", hp: 70 + s.stage * 13, maxHp: 70 + s.stage * 13, cooldown: 0.5, speed: 0 });
+            const bossHp = (12 + s.stage * 1.5) * bossRequiredShots(s.stage);
+            s.enemies.push({ x: w - 260, y: roadMid - 82, w: 180, h: 164, kind: "boss", hp: bossHp, maxHp: bossHp, cooldown: 0.5, speed: 0 });
           } else if (i % 3 === 0) {
             s.enemies.push({ x: w + i * 80, y: roadTop + 55 + (i % 4) * 70, w: 54, h: 66, kind: "tank", hp: 16 + s.stage * 4, maxHp: 16 + s.stage * 4, cooldown: 0.9, speed: 30 + s.stage * 2 });
           } else {
@@ -310,10 +315,19 @@ function TankPlus2DGame({ onMenu, on3d }: { onMenu: () => void; on3d?: () => voi
         ctx.fillRect(enemy.x + enemy.w / 2 - 7, enemy.y - 34, 14, 34);
         ctx.fillRect(enemy.x + enemy.w / 2 - 7, enemy.y + enemy.h, 14, 34);
       }
+      const healthBarWidth = enemy.kind === "boss" ? 280 : enemy.w;
+      const healthBarX = enemy.kind === "boss" ? enemy.x + enemy.w / 2 - healthBarWidth / 2 : enemy.x;
       ctx.fillStyle = "#ff4f4f";
-      ctx.fillRect(enemy.x, enemy.y - 10, enemy.w, 5);
+      ctx.fillRect(healthBarX, enemy.y - 16, healthBarWidth, enemy.kind === "boss" ? 10 : 5);
       ctx.fillStyle = "#79ff86";
-      ctx.fillRect(enemy.x, enemy.y - 10, enemy.w * Math.max(0, enemy.hp / enemy.maxHp), 5);
+      ctx.fillRect(healthBarX, enemy.y - 16, healthBarWidth * Math.max(0, enemy.hp / enemy.maxHp), enemy.kind === "boss" ? 10 : 5);
+      if (enemy.kind === "boss") {
+        ctx.fillStyle = "white";
+        ctx.font = "800 12px Inter, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(`${Math.ceil(enemy.hp / (12 + s.stage * 1.5))} shots left`, enemy.x + enemy.w / 2, enemy.y - 22);
+        ctx.textAlign = "left";
+      }
     }
     for (const shot of s.shots) {
       ctx.fillStyle = shot.from === "player" ? "#ffe36f" : "#ff8460";
@@ -667,7 +681,7 @@ function TankPlus3DCanvas() {
       mesh.position.set(x, 0, z);
       if (kind !== "infantry") mesh.rotation.y = Math.PI;
       scene.add(mesh);
-      const hp = kind === "boss" ? 115 + game.stage * 22 : kind === "tank" ? 28 + game.stage * 5 : 8 + game.stage * 1.2;
+      const hp = kind === "boss" ? (16 + game.stage * 1.7) * bossRequiredShots(game.stage) : kind === "tank" ? 28 + game.stage * 5 : 8 + game.stage * 1.2;
       actors.push({ mesh, kind, hp, maxHp: hp, cooldown: 0.65 + Math.random() * 0.7, speed: kind === "boss" ? 0 : kind === "tank" ? 5.6 + game.stage * 0.28 : 8.2 + game.stage * 0.35 });
     };
 
@@ -677,7 +691,7 @@ function TankPlus3DCanvas() {
       if (boss) {
         spawnActor("boss", 0, baseZ - 8);
         for (let i = 0; i < 4; i += 1) spawnActor(i % 2 === 0 ? "tank" : "infantry", THREE.MathUtils.randFloatSpread(14), baseZ + 8 + i * 4);
-        game.message = `Stage ${game.stage}: fortress boss tank. Same tank combat, but you must break through.`;
+        game.message = `Stage ${game.stage}: fortress boss tank. It needs about ${bossRequiredShots(game.stage)} direct hits to destroy.`;
       } else {
         const count = 4 + Math.floor(game.stage * 0.65);
         for (let i = 0; i < count; i += 1) spawnActor(i % 3 === 0 ? "tank" : "infantry", THREE.MathUtils.randFloatSpread(16), baseZ - i * 5);
@@ -819,7 +833,11 @@ function TankPlus3DCanvas() {
       const look = focus.clone().add(new THREE.Vector3(Math.sin(game.aimYaw), Math.sin(game.aimPitch) + 0.08, -Math.cos(game.aimYaw)).multiplyScalar(28));
       camera.lookAt(look);
       renderer.render(scene, camera);
-      if (hudRef.current) hudRef.current.textContent = `Tank Plus 3D Run • Stage ${Math.min(game.stage, 12)} / 12 • Hull ${Math.max(0, Math.round(game.hp))} • ${game.message} • Click to lock mouse • WASD drive • Mouse aim • LMB/Space fire`;
+      if (hudRef.current) {
+        const boss = actors.find((actor) => actor.kind === "boss");
+        const bossText = boss ? ` • BOSS ${Math.ceil((boss.hp / boss.maxHp) * 100)}% (${Math.ceil(boss.hp / (16 + game.stage * 1.7))} shots left)` : "";
+        hudRef.current.textContent = `Tank Plus 3D Run • Stage ${Math.min(game.stage, 12)} / 12 • Hull ${Math.max(0, Math.round(game.hp))}${bossText} • ${game.message} • Click to lock mouse • WASD drive • Mouse aim • LMB/Space fire`;
+      }
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
