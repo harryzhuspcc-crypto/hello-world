@@ -3,7 +3,7 @@ import * as THREE from 'three';
 type GameState = 'menu' | 'playing' | 'paused' | 'upgrade' | 'gameover';
 type UpgradeId = 'health' | 'damage' | 'armor' | 'reload' | 'chargePower' | 'chargeRange';
 type StoreUpgradeId = 'starterHealth' | 'starterDamage' | 'starterArmor' | 'starterReload' | 'starterChargePower' | 'starterChargeRange';
-type EnemyKind = 'tank' | 'drone';
+type EnemyKind = 'tank' | 'drone' | 'boss' | 'infantry';
 type ShiftMode = 'strike' | 'wave';
 
 type UpgradeButton = HTMLButtonElement & { dataset: DOMStringMap & { upgrade: UpgradeId } };
@@ -31,6 +31,9 @@ interface Enemy {
   turretPivot?: THREE.Group;
   gunPivot?: THREE.Group;
   muzzle?: THREE.Object3D;
+  radialMuzzles?: THREE.Object3D[];
+  sideDoors?: THREE.Object3D[];
+  rearDoor?: THREE.Object3D;
   speed: number;
   health: number;
   fireCooldown: number;
@@ -40,6 +43,11 @@ interface Enemy {
   orbitDirection: number;
   altitude: number;
   flashTime: number;
+  spawnCooldown?: number;
+  spawnCount?: number;
+  infantryCooldown?: number;
+  infantryCount?: number;
+  contactCooldown?: number;
 }
 
 interface Projectile {
@@ -516,6 +524,123 @@ export class TankGame {
     return { root, turretPivot, gunPivot, muzzle };
   }
 
+  private createBossTankVisual() {
+    const root = new THREE.Group();
+    const hullMaterial = new THREE.MeshStandardMaterial({ color: 0x3f4240, roughness: 0.86, metalness: 0.28 });
+    const armorMaterial = new THREE.MeshStandardMaterial({ color: 0x6e5845, roughness: 0.82, metalness: 0.2 });
+    const cannonMaterial = new THREE.MeshStandardMaterial({ color: 0x1f2324, roughness: 0.72, metalness: 0.38 });
+    const glowMaterial = new THREE.MeshBasicMaterial({ color: 0xff6f3c });
+
+    const hull = new THREE.Mesh(new THREE.BoxGeometry(7.8, 2.2, 10.8), hullMaterial);
+    hull.position.y = 1.55;
+    root.add(hull);
+
+    const upperDeck = new THREE.Mesh(new THREE.BoxGeometry(6.3, 1.2, 7.2), armorMaterial);
+    upperDeck.position.set(0, 3.15, -0.45);
+    root.add(upperDeck);
+
+    const leftTrack = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, 11.6), cannonMaterial);
+    leftTrack.position.set(-4.55, 0.95, 0);
+    root.add(leftTrack);
+
+    const rightTrack = leftTrack.clone();
+    rightTrack.position.x = 4.55;
+    root.add(rightTrack);
+
+    const turretPivot = new THREE.Group();
+    turretPivot.position.set(0, 4.05, -1.15);
+    root.add(turretPivot);
+
+    const turret = new THREE.Mesh(new THREE.CylinderGeometry(2.05, 2.35, 1.1, 24), armorMaterial);
+    turret.rotation.x = Math.PI / 2;
+    turretPivot.add(turret);
+
+    const gunPivot = new THREE.Group();
+    gunPivot.position.set(0, 0.05, -2.35);
+    turretPivot.add(gunPivot);
+
+    const mainBarrel = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.58, 5.6), cannonMaterial);
+    mainBarrel.position.set(0, 0, -2.75);
+    gunPivot.add(mainBarrel);
+
+    const muzzle = new THREE.Object3D();
+    muzzle.position.set(0, 0, -5.65);
+    gunPivot.add(muzzle);
+
+    const radialMuzzles: THREE.Object3D[] = [];
+    for (let index = 0; index < 8; index += 1) {
+      const angle = (index / 8) * Math.PI * 2;
+      const pivot = new THREE.Group();
+      pivot.rotation.y = angle;
+      pivot.position.y = 2.65;
+      root.add(pivot);
+
+      const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.34, 4.1), cannonMaterial);
+      barrel.position.set(0, 0, -5.4);
+      pivot.add(barrel);
+
+      const brake = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.52, 0.42), glowMaterial);
+      brake.position.set(0, 0, -7.45);
+      pivot.add(brake);
+
+      const radialMuzzle = new THREE.Object3D();
+      radialMuzzle.position.set(0, 0, -7.75);
+      pivot.add(radialMuzzle);
+      radialMuzzles.push(radialMuzzle);
+    }
+
+    const rearDoor = new THREE.Group();
+    rearDoor.position.set(0, 1.65, 5.55);
+    root.add(rearDoor);
+    const rearDoorMesh = new THREE.Mesh(new THREE.BoxGeometry(5.8, 2.2, 0.28), armorMaterial);
+    rearDoor.add(rearDoorMesh);
+
+    const sideDoors: THREE.Object3D[] = [];
+    for (const side of [-1, 1]) {
+      const door = new THREE.Group();
+      door.position.set(side * 4.05, 1.75, 1.4);
+      door.rotation.z = side * 0.08;
+      root.add(door);
+      const doorMesh = new THREE.Mesh(new THREE.BoxGeometry(0.28, 1.7, 2.2), armorMaterial);
+      door.add(doorMesh);
+      sideDoors.push(door);
+    }
+
+    for (const x of [-2.4, 0, 2.4]) {
+      const light = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.36, 0.22), glowMaterial);
+      light.position.set(x, 2.5, -5.58);
+      root.add(light);
+    }
+
+    return { root, turretPivot, gunPivot, muzzle, radialMuzzles, sideDoors, rearDoor };
+  }
+
+  private createInfantryVisual() {
+    const root = new THREE.Group();
+    const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x594833, roughness: 0.9, metalness: 0.05 });
+    const helmetMaterial = new THREE.MeshStandardMaterial({ color: 0x2c3428, roughness: 0.84, metalness: 0.08 });
+    const weaponMaterial = new THREE.MeshBasicMaterial({ color: 0xffcf7a });
+
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.9, 0.3), bodyMaterial);
+    body.position.y = 0.72;
+    root.add(body);
+
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 10), helmetMaterial);
+    head.position.y = 1.32;
+    root.add(head);
+
+    const rifle = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 0.92), weaponMaterial);
+    rifle.position.set(0.26, 0.92, -0.38);
+    root.add(rifle);
+
+    const muzzle = new THREE.Object3D();
+    muzzle.position.set(0.26, 0.92, -0.9);
+    root.add(muzzle);
+    root.userData.muzzle = muzzle;
+
+    return root;
+  }
+
   private createDroneVisual() {
     const root = new THREE.Group();
     const bodyMaterial = new THREE.MeshStandardMaterial({
@@ -917,6 +1042,10 @@ export class TankGame {
       return `${this.getShiftModeLabel()} ready // Tab switch // Shift use ability`;
     }
 
+    if (this.currentWave % 10 === 0) {
+      return `Wave ${this.currentWave} BOSS // fortress tank: radial cannons, rear ramps, infantry doors`;
+    }
+
     return `Wave ${this.currentWave} // ${this.getShiftModeLabel()} selected // hold LMB to charge`;
   }
 
@@ -1009,7 +1138,7 @@ export class TankGame {
 
     const impactPoint = intersections[0]?.point?.clone() ?? enemy.root.position.clone();
     this.killEnemy(enemy, impactPoint, false);
-    this.showExplosion(impactPoint, enemy.kind === 'drone' ? 5.6 : 4.2, 0xff4b4b);
+    this.showExplosion(impactPoint, Math.max(4.2, this.getEnemyHitRadius(enemy) + 2.4), 0xff4b4b);
     this.audio.impact();
     this.consumeShiftCharge();
     this.cancelTargetingMode(true);
@@ -1025,8 +1154,8 @@ export class TankGame {
     const center = this.playerPosition.clone().add(new THREE.Vector3(0, 0.9, 0));
     const waveRadius = 16;
     const victims = this.enemies.filter((enemy) => {
-      const targetPoint = enemy.root.position.clone().add(new THREE.Vector3(0, enemy.kind === 'drone' ? 0 : 0.9, 0));
-      return targetPoint.distanceTo(center) <= waveRadius;
+      const targetPoint = enemy.root.position.clone().add(new THREE.Vector3(0, this.getEnemyAimOffset(enemy), 0));
+      return targetPoint.distanceTo(center) <= waveRadius + this.getEnemyHitRadius(enemy) * 0.4;
     });
 
     this.showExplosion(center, waveRadius, 0xff5959);
@@ -1041,9 +1170,9 @@ export class TankGame {
     }
 
     for (const enemy of [...victims]) {
-      const impactPoint = enemy.root.position.clone().add(new THREE.Vector3(0, enemy.kind === 'drone' ? 1.8 : 0.6, 0));
+      const impactPoint = enemy.root.position.clone().add(new THREE.Vector3(0, this.getEnemyAimOffset(enemy), 0));
       this.killEnemy(enemy, impactPoint, false);
-      this.createBurst(impactPoint, 0xff6e6e, enemy.kind === 'drone' ? 0.55 : 0.4);
+      this.createBurst(impactPoint, 0xff6e6e, enemy.kind === 'boss' ? 0.9 : enemy.kind === 'infantry' ? 0.25 : 0.45);
     }
 
     this.consumeShiftCharge();
@@ -1095,7 +1224,8 @@ export class TankGame {
     this.playerHealth = this.playerMaxHealth;
     this.waveJustCleared = false;
 
-    const tankCount = 2 + wave * 2;
+    const isBossWave = wave % 10 === 0;
+    const tankCount = isBossWave ? 8 + Math.floor(wave / 2) : 2 + wave * 2;
     const droneCount = wave > 5 ? 1 + Math.floor((wave - 6) / 2) : 0;
 
     for (let index = 0; index < tankCount; index += 1) {
@@ -1104,6 +1234,11 @@ export class TankGame {
 
     for (let index = 0; index < droneCount; index += 1) {
       this.spawnDrone(index, droneCount);
+    }
+
+    if (isBossWave) {
+      this.spawnBossTank();
+      this.statusPill.textContent = `Wave ${wave} boss incoming // destroy the fortress tank`;
     }
 
     this.updateUpgradeOverlay();
@@ -1115,31 +1250,37 @@ export class TankGame {
     const radius = 42 + (index % 3) * 6 + Math.random() * 6;
     const x = Math.cos(angle) * radius;
     const z = Math.sin(angle) * radius;
+    this.spawnEnemyTankAt(new THREE.Vector3(x, this.getTankHeight(x, z), z), angle + Math.PI);
+  }
 
-    const visual = this.createTankVisual({ hull: 0x6f4c34, turret: 0x8f6346, accent: 0xf0c487 });
+  private spawnEnemyTankAt(position: THREE.Vector3, yaw: number, reinforcement = false) {
+    const visual = this.createTankVisual({ hull: reinforcement ? 0x76533b : 0x6f4c34, turret: reinforcement ? 0x9a6b4f : 0x8f6346, accent: 0xf0c487 });
+    const x = THREE.MathUtils.clamp(position.x, -this.worldHalfSize, this.worldHalfSize);
+    const z = THREE.MathUtils.clamp(position.z, -this.worldHalfSize, this.worldHalfSize);
     visual.root.position.set(x, this.getTankHeight(x, z), z);
-    visual.root.rotation.y = angle + Math.PI;
+    visual.root.rotation.y = yaw;
     this.scene.add(visual.root);
 
+    const id = this.nextEnemyId++;
+    visual.root.userData.enemyId = id;
+
     this.enemies.push({
-      id: this.nextEnemyId++,
+      id,
       kind: 'tank',
       root: visual.root,
       turretPivot: visual.turretPivot,
       gunPivot: visual.gunPivot,
       muzzle: visual.muzzle,
-      speed: 5.2 + Math.min(this.currentWave * 0.35, 2.6),
+      speed: (reinforcement ? 6.6 : 5.2) + Math.min(this.currentWave * 0.35, 2.6),
       health: 2 + Math.floor((this.currentWave - 1) / 4),
-      fireCooldown: 1.2 + Math.random() * 0.65,
-      desiredRange: 18 + Math.random() * 5,
+      fireCooldown: reinforcement ? 0.9 + Math.random() * 0.35 : 1.2 + Math.random() * 0.65,
+      desiredRange: reinforcement ? 14 + Math.random() * 4 : 18 + Math.random() * 5,
       turnSpeed: 1.25 + Math.random() * 0.45,
       bobOffset: Math.random() * Math.PI * 2,
       orbitDirection: Math.random() > 0.5 ? 1 : -1,
       altitude: 0,
       flashTime: 0,
     });
-
-    visual.root.userData.enemyId = this.nextEnemyId - 1;
   }
 
   private spawnDrone(index: number, count: number) {
@@ -1167,6 +1308,74 @@ export class TankGame {
       orbitDirection: Math.random() > 0.5 ? 1 : -1,
       altitude: 14 + Math.random() * 6,
       flashTime: 0,
+    });
+  }
+
+  private spawnBossTank() {
+    const angle = Math.random() * Math.PI * 2;
+    const radius = 54;
+    const x = Math.cos(angle) * radius;
+    const z = Math.sin(angle) * radius;
+    const visual = this.createBossTankVisual();
+    visual.root.position.set(x, this.getTankHeight(x, z) + 0.22, z);
+    visual.root.rotation.y = angle + Math.PI;
+    this.scene.add(visual.root);
+
+    const id = this.nextEnemyId++;
+    visual.root.userData.enemyId = id;
+
+    this.enemies.push({
+      id,
+      kind: 'boss',
+      root: visual.root,
+      turretPivot: visual.turretPivot,
+      gunPivot: visual.gunPivot,
+      muzzle: visual.muzzle,
+      radialMuzzles: visual.radialMuzzles,
+      sideDoors: visual.sideDoors,
+      rearDoor: visual.rearDoor,
+      speed: 2.35 + Math.min(this.currentWave * 0.08, 1.4),
+      health: 56 + this.currentWave * 6,
+      fireCooldown: 1.5,
+      desiredRange: 30,
+      turnSpeed: 0.72,
+      bobOffset: Math.random() * Math.PI * 2,
+      orbitDirection: 1,
+      altitude: 0,
+      flashTime: 0,
+      spawnCooldown: 4.2,
+      spawnCount: 0,
+      infantryCooldown: 2.2,
+      infantryCount: 0,
+    });
+  }
+
+  private spawnInfantry(position: THREE.Vector3, yaw: number) {
+    const root = this.createInfantryVisual();
+    const x = THREE.MathUtils.clamp(position.x, -this.worldHalfSize, this.worldHalfSize);
+    const z = THREE.MathUtils.clamp(position.z, -this.worldHalfSize, this.worldHalfSize);
+    root.position.set(x, this.getTerrainHeight(x, z), z);
+    root.rotation.y = yaw;
+    this.scene.add(root);
+
+    const id = this.nextEnemyId++;
+    root.userData.enemyId = id;
+
+    this.enemies.push({
+      id,
+      kind: 'infantry',
+      root,
+      muzzle: root.userData.muzzle as THREE.Object3D,
+      speed: 7.2 + Math.min(this.currentWave * 0.1, 2.2),
+      health: 1.15 + Math.floor(this.currentWave / 10) * 0.5,
+      fireCooldown: 0.7 + Math.random() * 0.65,
+      desiredRange: 6,
+      turnSpeed: 3.4,
+      bobOffset: Math.random() * Math.PI * 2,
+      orbitDirection: Math.random() > 0.5 ? 1 : -1,
+      altitude: 0,
+      flashTime: 0,
+      contactCooldown: 0,
     });
   }
 
@@ -1332,89 +1541,284 @@ export class TankGame {
     return false;
   }
 
+  private getEnemyCollisionRadius(enemy: Enemy) {
+    if (enemy.kind === 'boss') {
+      return 5.2;
+    }
+    if (enemy.kind === 'infantry') {
+      return 0.7;
+    }
+    if (enemy.kind === 'drone') {
+      return 2.4;
+    }
+    return this.enemyRadius;
+  }
+
+  private getEnemyHitRadius(enemy: Enemy) {
+    if (enemy.kind === 'boss') {
+      return 5.8;
+    }
+    if (enemy.kind === 'infantry') {
+      return 0.75;
+    }
+    if (enemy.kind === 'drone') {
+      return 3.2;
+    }
+    return 1.9;
+  }
+
+  private getEnemyAimOffset(enemy: Enemy) {
+    if (enemy.kind === 'boss') {
+      return 2.4;
+    }
+    if (enemy.kind === 'infantry') {
+      return 0.8;
+    }
+    if (enemy.kind === 'drone') {
+      return 0;
+    }
+    return 0.9;
+  }
+
+  private getEnemyBurstColor(enemy: Enemy) {
+    if (enemy.kind === 'boss') {
+      return 0xff6e45;
+    }
+    if (enemy.kind === 'infantry') {
+      return 0xffd27d;
+    }
+    if (enemy.kind === 'drone') {
+      return 0x97efff;
+    }
+    return 0xffbb7e;
+  }
+
+  private getEnemyKillColor(enemy: Enemy) {
+    if (enemy.kind === 'boss') {
+      return 0xff3f2f;
+    }
+    if (enemy.kind === 'infantry') {
+      return 0xffcf7a;
+    }
+    if (enemy.kind === 'drone') {
+      return 0xc7ffff;
+    }
+    return 0xff8f4a;
+  }
+
   private updateEnemies(delta: number) {
     const playerFlat = new THREE.Vector3(this.playerPosition.x, 0, this.playerPosition.z);
 
-    for (const enemy of this.enemies) {
+    for (const enemy of [...this.enemies]) {
       enemy.fireCooldown -= delta;
       enemy.flashTime = Math.max(0, enemy.flashTime - delta);
 
       if (enemy.kind === 'tank') {
-        const toPlayer = playerFlat.clone().sub(new THREE.Vector3(enemy.root.position.x, 0, enemy.root.position.z));
-        const distance = toPlayer.length();
-        const targetYaw = Math.atan2(toPlayer.x, -toPlayer.z);
-        enemy.root.rotation.y = this.rotateTowards(enemy.root.rotation.y, targetYaw, enemy.turnSpeed * delta);
-
-        if (enemy.turretPivot && enemy.gunPivot) {
-          enemy.turretPivot.rotation.y = this.rotateTowards(enemy.turretPivot.rotation.y, this.wrapAngle(targetYaw - enemy.root.rotation.y), 2.3 * delta);
-          enemy.gunPivot.rotation.x = THREE.MathUtils.lerp(enemy.gunPivot.rotation.x, 0.08, delta * 4);
-        }
-
-        if (distance > enemy.desiredRange) {
-          const forward = new THREE.Vector3(Math.sin(enemy.root.rotation.y), 0, -Math.cos(enemy.root.rotation.y));
-          const speed = enemy.speed * (distance > enemy.desiredRange + 8 ? 1 : 0.65);
-          const nextX = THREE.MathUtils.clamp(enemy.root.position.x + forward.x * speed * delta, -this.worldHalfSize, this.worldHalfSize);
-          if (!this.collidesWithObstacle(nextX, enemy.root.position.z, this.enemyRadius)) {
-            enemy.root.position.x = nextX;
-          }
-          const nextZ = THREE.MathUtils.clamp(enemy.root.position.z + forward.z * speed * delta, -this.worldHalfSize, this.worldHalfSize);
-          if (!this.collidesWithObstacle(enemy.root.position.x, nextZ, this.enemyRadius)) {
-            enemy.root.position.z = nextZ;
-          }
-        }
-
-        enemy.root.position.y = this.getTankHeight(enemy.root.position.x, enemy.root.position.z);
-
-        if (distance < 48 && enemy.fireCooldown <= 0 && enemy.muzzle) {
-          const origin = new THREE.Vector3();
-          enemy.muzzle.getWorldPosition(origin);
-          const target = this.playerPosition.clone().add(new THREE.Vector3(0, 1.2, 0));
-          if (this.hasLineOfSight(origin, target)) {
-            const velocity = target.sub(origin).normalize().multiplyScalar(24 + this.currentWave * 0.35);
-            this.spawnProjectile('enemy', origin, velocity, 12 + Math.floor(this.currentWave / 3) * 2, 0xf3b56b, 0.28, 5.5);
-            enemy.fireCooldown = Math.max(0.72, 2.6 - this.currentWave * 0.08);
-          }
-        }
+        this.updateEnemyTank(enemy, delta, playerFlat);
+      } else if (enemy.kind === 'boss') {
+        this.updateBossTank(enemy, delta, playerFlat);
+      } else if (enemy.kind === 'infantry') {
+        this.updateInfantry(enemy, delta, playerFlat);
       } else {
-        const orbitAngle = this.clock.elapsedTime * 0.48 * enemy.orbitDirection + enemy.bobOffset;
-        const desiredPosition = this.playerPosition.clone().add(
-          new THREE.Vector3(
-            Math.cos(orbitAngle) * enemy.desiredRange,
-            enemy.altitude + Math.sin(this.clock.elapsedTime * 1.6 + enemy.bobOffset) * 1.2,
-            Math.sin(orbitAngle) * enemy.desiredRange,
-          ),
-        );
-
-        enemy.root.position.lerp(desiredPosition, Math.min(1, delta * 1.35));
-        enemy.root.lookAt(this.playerPosition.x, this.playerPosition.y + 1.2, this.playerPosition.z);
-
-        const distance = enemy.root.position.distanceTo(this.playerPosition);
-        if (distance < 52 && enemy.fireCooldown <= 0) {
-          const origin = enemy.root.position.clone();
-          const target = this.playerPosition.clone().add(new THREE.Vector3(0, 0.8, 0));
-          const velocity = target.sub(origin).normalize().multiplyScalar(24 + this.currentWave * 0.35);
-          this.spawnProjectile('enemy', origin, velocity, 20 + Math.floor((this.currentWave - 5) / 2) * 2, 0xffc970, 0.3, 5.8);
-          this.audio.drone();
-          enemy.fireCooldown = Math.max(0.45, 1.35 - this.currentWave * 0.035);
-        }
+        this.updateDrone(enemy, delta);
       }
     }
 
+    this.separateGroundEnemies();
+  }
+
+  private updateEnemyTank(enemy: Enemy, delta: number, playerFlat: THREE.Vector3) {
+    const toPlayer = playerFlat.clone().sub(new THREE.Vector3(enemy.root.position.x, 0, enemy.root.position.z));
+    const distance = toPlayer.length();
+    const targetYaw = Math.atan2(toPlayer.x, -toPlayer.z);
+    enemy.root.rotation.y = this.rotateTowards(enemy.root.rotation.y, targetYaw, enemy.turnSpeed * delta);
+
+    if (enemy.turretPivot && enemy.gunPivot) {
+      enemy.turretPivot.rotation.y = this.rotateTowards(enemy.turretPivot.rotation.y, this.wrapAngle(targetYaw - enemy.root.rotation.y), 2.3 * delta);
+      enemy.gunPivot.rotation.x = THREE.MathUtils.lerp(enemy.gunPivot.rotation.x, 0.08, delta * 4);
+    }
+
+    if (distance > enemy.desiredRange) {
+      this.moveGroundEnemy(enemy, enemy.speed * (distance > enemy.desiredRange + 8 ? 1 : 0.65), delta, this.enemyRadius);
+    }
+
+    enemy.root.position.y = this.getTankHeight(enemy.root.position.x, enemy.root.position.z);
+
+    if (distance < 48 && enemy.fireCooldown <= 0 && enemy.muzzle) {
+      const origin = new THREE.Vector3();
+      enemy.muzzle.getWorldPosition(origin);
+      const target = this.playerPosition.clone().add(new THREE.Vector3(0, 1.2, 0));
+      if (this.hasLineOfSight(origin, target)) {
+        const velocity = target.sub(origin).normalize().multiplyScalar(24 + this.currentWave * 0.35);
+        this.spawnProjectile('enemy', origin, velocity, 12 + Math.floor(this.currentWave / 3) * 2, 0xf3b56b, 0.28, 5.5);
+        enemy.fireCooldown = Math.max(0.72, 2.6 - this.currentWave * 0.08);
+      }
+    }
+  }
+
+  private updateBossTank(enemy: Enemy, delta: number, playerFlat: THREE.Vector3) {
+    const toPlayer = playerFlat.clone().sub(new THREE.Vector3(enemy.root.position.x, 0, enemy.root.position.z));
+    const distance = toPlayer.length();
+    const targetYaw = Math.atan2(toPlayer.x, -toPlayer.z);
+    enemy.root.rotation.y = this.rotateTowards(enemy.root.rotation.y, targetYaw, enemy.turnSpeed * delta);
+
+    if (enemy.turretPivot && enemy.gunPivot) {
+      enemy.turretPivot.rotation.y = this.rotateTowards(enemy.turretPivot.rotation.y, this.wrapAngle(targetYaw - enemy.root.rotation.y), 1.9 * delta);
+      enemy.gunPivot.rotation.x = THREE.MathUtils.lerp(enemy.gunPivot.rotation.x, 0.03, delta * 3);
+    }
+
+    if (distance > enemy.desiredRange) {
+      this.moveGroundEnemy(enemy, enemy.speed, delta, 4.8);
+    }
+
+    enemy.root.position.y = this.getTankHeight(enemy.root.position.x, enemy.root.position.z) + 0.22;
+
+    enemy.spawnCooldown = (enemy.spawnCooldown ?? 0) - delta;
+    enemy.infantryCooldown = (enemy.infantryCooldown ?? 0) - delta;
+
+    const doorOpen = (enemy.spawnCooldown ?? 0) < 1.15 || (enemy.infantryCooldown ?? 0) < 0.9;
+    if (enemy.rearDoor) {
+      enemy.rearDoor.rotation.x = THREE.MathUtils.lerp(enemy.rearDoor.rotation.x, doorOpen ? -1.15 : 0, delta * 6);
+    }
+    if (enemy.sideDoors) {
+      for (let index = 0; index < enemy.sideDoors.length; index += 1) {
+        const side = index === 0 ? -1 : 1;
+        enemy.sideDoors[index].rotation.z = THREE.MathUtils.lerp(enemy.sideDoors[index].rotation.z, doorOpen ? side * 1.15 : side * 0.08, delta * 6);
+      }
+    }
+
+    if (enemy.fireCooldown <= 0 && enemy.radialMuzzles) {
+      for (const radialMuzzle of enemy.radialMuzzles) {
+        const origin = new THREE.Vector3();
+        radialMuzzle.getWorldPosition(origin);
+        const worldQuaternion = new THREE.Quaternion();
+        radialMuzzle.getWorldQuaternion(worldQuaternion);
+        const direction = new THREE.Vector3(0, 0.02, -1).applyQuaternion(worldQuaternion).normalize();
+        this.spawnProjectile('enemy', origin, direction.multiplyScalar(28 + this.currentWave * 0.25), 18 + Math.floor(this.currentWave / 4) * 2, 0xff6e45, 0.34, 5.8);
+      }
+
+      if (enemy.muzzle) {
+        const origin = new THREE.Vector3();
+        enemy.muzzle.getWorldPosition(origin);
+        const target = this.playerPosition.clone().add(new THREE.Vector3(0, 1.4, 0));
+        const velocity = target.sub(origin).normalize().multiplyScalar(30 + this.currentWave * 0.3);
+        this.spawnProjectile('enemy', origin, velocity, 26 + Math.floor(this.currentWave / 5) * 3, 0xffa156, 0.42, 6.2);
+      }
+
+      this.createBurst(enemy.root.position.clone().add(new THREE.Vector3(0, 3.2, 0)), 0xff744f, 0.55);
+      this.audio.cannon();
+      enemy.fireCooldown = 2.45;
+    }
+
+    if ((enemy.spawnCount ?? 0) < 4 + Math.floor(this.currentWave / 20) && (enemy.spawnCooldown ?? 0) <= 0) {
+      const forward = new THREE.Vector3(Math.sin(enemy.root.rotation.y), 0, -Math.cos(enemy.root.rotation.y));
+      const rear = enemy.root.position.clone().addScaledVector(forward, -7.4);
+      rear.x += THREE.MathUtils.randFloatSpread(2.4);
+      rear.z += THREE.MathUtils.randFloatSpread(2.4);
+      this.spawnEnemyTankAt(rear, enemy.root.rotation.y + Math.PI + THREE.MathUtils.randFloatSpread(0.3), true);
+      this.createBurst(rear.clone().add(new THREE.Vector3(0, 1.4, 0)), 0xffb36d, 0.48);
+      enemy.spawnCount = (enemy.spawnCount ?? 0) + 1;
+      enemy.spawnCooldown = 5.8;
+      this.statusPill.textContent = 'Fortress rear ramp open // reinforcement tank deployed';
+    }
+
+    if ((enemy.infantryCount ?? 0) < 8 + Math.floor(this.currentWave / 10) * 2 && (enemy.infantryCooldown ?? 0) <= 0) {
+      const side = (enemy.infantryCount ?? 0) % 2 === 0 ? -1 : 1;
+      const sideDirection = new THREE.Vector3(Math.cos(enemy.root.rotation.y), 0, Math.sin(enemy.root.rotation.y)).multiplyScalar(side);
+      const spawnPoint = enemy.root.position.clone().addScaledVector(sideDirection, 5.6);
+      spawnPoint.addScaledVector(new THREE.Vector3(Math.sin(enemy.root.rotation.y), 0, -Math.cos(enemy.root.rotation.y)), THREE.MathUtils.randFloat(-1.5, 2.2));
+      this.spawnInfantry(spawnPoint, targetYaw);
+      this.createBurst(spawnPoint.clone().add(new THREE.Vector3(0, 0.8, 0)), 0xffcf7a, 0.25);
+      enemy.infantryCount = (enemy.infantryCount ?? 0) + 1;
+      enemy.infantryCooldown = 2.4;
+      this.statusPill.textContent = 'Side doors open // infantry boarding party incoming';
+    }
+  }
+
+  private updateInfantry(enemy: Enemy, delta: number, playerFlat: THREE.Vector3) {
+    const toPlayer = playerFlat.clone().sub(new THREE.Vector3(enemy.root.position.x, 0, enemy.root.position.z));
+    const distance = toPlayer.length();
+    const targetYaw = Math.atan2(toPlayer.x, -toPlayer.z);
+    enemy.root.rotation.y = this.rotateTowards(enemy.root.rotation.y, targetYaw, enemy.turnSpeed * delta);
+    enemy.contactCooldown = Math.max(0, (enemy.contactCooldown ?? 0) - delta);
+
+    if (distance > 2.1) {
+      this.moveGroundEnemy(enemy, enemy.speed, delta, 0.55);
+    } else if ((enemy.contactCooldown ?? 0) <= 0) {
+      this.damagePlayer(7 + Math.floor(this.currentWave / 5));
+      this.createBurst(this.playerPosition.clone().add(new THREE.Vector3(0, 0.9, 0)), 0xffcf7a, 0.22);
+      enemy.contactCooldown = 0.78;
+    }
+
+    enemy.root.position.y = this.getTerrainHeight(enemy.root.position.x, enemy.root.position.z);
+    enemy.root.position.y += Math.abs(Math.sin(this.clock.elapsedTime * 9 + enemy.bobOffset)) * 0.08;
+
+    if (distance < 28 && enemy.fireCooldown <= 0 && enemy.muzzle) {
+      const origin = new THREE.Vector3();
+      enemy.muzzle.getWorldPosition(origin);
+      const target = this.playerPosition.clone().add(new THREE.Vector3(0, 1.0, 0));
+      if (this.hasLineOfSight(origin, target)) {
+        const velocity = target.sub(origin).normalize().multiplyScalar(31);
+        this.spawnProjectile('enemy', origin, velocity, 5 + Math.floor(this.currentWave / 8), 0xffd27d, 0.12, 2.6);
+        enemy.fireCooldown = 1.15 + Math.random() * 0.6;
+      }
+    }
+  }
+
+  private updateDrone(enemy: Enemy, delta: number) {
+    const orbitAngle = this.clock.elapsedTime * 0.48 * enemy.orbitDirection + enemy.bobOffset;
+    const desiredPosition = this.playerPosition.clone().add(
+      new THREE.Vector3(
+        Math.cos(orbitAngle) * enemy.desiredRange,
+        enemy.altitude + Math.sin(this.clock.elapsedTime * 1.6 + enemy.bobOffset) * 1.2,
+        Math.sin(orbitAngle) * enemy.desiredRange,
+      ),
+    );
+
+    enemy.root.position.lerp(desiredPosition, Math.min(1, delta * 1.35));
+    enemy.root.lookAt(this.playerPosition.x, this.playerPosition.y + 1.2, this.playerPosition.z);
+
+    const distance = enemy.root.position.distanceTo(this.playerPosition);
+    if (distance < 52 && enemy.fireCooldown <= 0) {
+      const origin = enemy.root.position.clone();
+      const target = this.playerPosition.clone().add(new THREE.Vector3(0, 0.8, 0));
+      const velocity = target.sub(origin).normalize().multiplyScalar(24 + this.currentWave * 0.35);
+      this.spawnProjectile('enemy', origin, velocity, 20 + Math.floor((this.currentWave - 5) / 2) * 2, 0xffc970, 0.3, 5.8);
+      this.audio.drone();
+      enemy.fireCooldown = Math.max(0.45, 1.35 - this.currentWave * 0.035);
+    }
+  }
+
+  private moveGroundEnemy(enemy: Enemy, speed: number, delta: number, radius: number) {
+    const forward = new THREE.Vector3(Math.sin(enemy.root.rotation.y), 0, -Math.cos(enemy.root.rotation.y));
+    const nextX = THREE.MathUtils.clamp(enemy.root.position.x + forward.x * speed * delta, -this.worldHalfSize, this.worldHalfSize);
+    if (!this.collidesWithObstacle(nextX, enemy.root.position.z, radius)) {
+      enemy.root.position.x = nextX;
+    }
+    const nextZ = THREE.MathUtils.clamp(enemy.root.position.z + forward.z * speed * delta, -this.worldHalfSize, this.worldHalfSize);
+    if (!this.collidesWithObstacle(enemy.root.position.x, nextZ, radius)) {
+      enemy.root.position.z = nextZ;
+    }
+  }
+
+  private separateGroundEnemies() {
     for (let index = 0; index < this.enemies.length; index += 1) {
       const current = this.enemies[index];
-      if (current.kind !== 'tank') {
+      if (current.kind === 'drone') {
         continue;
       }
+      const currentRadius = this.getEnemyCollisionRadius(current);
       for (let otherIndex = index + 1; otherIndex < this.enemies.length; otherIndex += 1) {
         const other = this.enemies[otherIndex];
-        if (other.kind !== 'tank') {
+        if (other.kind === 'drone') {
           continue;
         }
+        const minimumDistance = currentRadius + this.getEnemyCollisionRadius(other);
         const offset = current.root.position.clone().sub(other.root.position);
         offset.y = 0;
         const distance = offset.length();
-        if (distance > 0 && distance < 3.6) {
-          offset.normalize().multiplyScalar((3.6 - distance) * 0.5);
+        if (distance > 0 && distance < minimumDistance) {
+          offset.normalize().multiplyScalar((minimumDistance - distance) * 0.5);
           current.root.position.add(offset);
           other.root.position.sub(offset);
         }
@@ -1476,7 +1880,7 @@ export class TankGame {
     enemy.flashTime = 0.12;
     this.audio.hit();
     this.showHitMarker();
-    this.createBurst(point, enemy.kind === 'drone' ? 0x97efff : 0xffbb7e, 0.26);
+    this.createBurst(point, this.getEnemyBurstColor(enemy), enemy.kind === 'boss' ? 0.42 : enemy.kind === 'infantry' ? 0.16 : 0.26);
 
     if (enemy.health <= 0) {
       this.killEnemy(enemy, point);
@@ -1485,7 +1889,7 @@ export class TankGame {
 
   private killEnemy(enemy: Enemy, point: THREE.Vector3, awardShiftCharge = true) {
     this.kills += 1;
-    this.bankCoins += 1;
+    this.bankCoins += enemy.kind === 'boss' ? 12 : 1;
     if (awardShiftCharge && !this.shiftReady) {
       this.shiftKills = Math.min(this.shiftKillsRequired, this.shiftKills + 1);
       if (this.shiftKills >= this.shiftKillsRequired) {
@@ -1503,7 +1907,11 @@ export class TankGame {
     this.scene.remove(enemy.root);
     this.disposeGroup(enemy.root);
     this.audio.kill();
-    this.createBurst(point, enemy.kind === 'drone' ? 0xc7ffff : 0xff8f4a, enemy.kind === 'drone' ? 0.42 : 0.34);
+    this.createBurst(point, this.getEnemyKillColor(enemy), enemy.kind === 'boss' ? 1.1 : enemy.kind === 'drone' ? 0.42 : enemy.kind === 'infantry' ? 0.24 : 0.34);
+    if (enemy.kind === 'boss') {
+      this.showExplosion(point, 9.5, 0xff6e45);
+      this.statusPill.textContent = 'Fortress tank destroyed // finish off remaining forces';
+    }
   }
 
   private spawnProjectile(
@@ -1554,8 +1962,8 @@ export class TankGame {
       } else {
         let hitEnemy = false;
         for (const enemy of this.enemies) {
-          const hitRadius = enemy.kind === 'drone' ? 3.2 : 1.9;
-          const targetPoint = enemy.root.position.clone().add(new THREE.Vector3(0, enemy.kind === 'drone' ? 0 : 0.9, 0));
+          const hitRadius = this.getEnemyHitRadius(enemy);
+          const targetPoint = enemy.root.position.clone().add(new THREE.Vector3(0, this.getEnemyAimOffset(enemy), 0));
           if (projectile.mesh.position.distanceTo(targetPoint) < hitRadius + projectile.radius) {
             this.explodePlayerProjectile(projectile, projectile.mesh.position.clone());
             this.destroyProjectile(index);
@@ -1602,9 +2010,9 @@ export class TankGame {
     this.audio.impact();
 
     for (const enemy of [...this.enemies]) {
-      const targetPoint = enemy.root.position.clone().add(new THREE.Vector3(0, enemy.kind === 'drone' ? 0 : 0.9, 0));
+      const targetPoint = enemy.root.position.clone().add(new THREE.Vector3(0, this.getEnemyAimOffset(enemy), 0));
       const distance = targetPoint.distanceTo(position);
-      if (distance > explosionRadius + (enemy.kind === 'drone' ? 2.4 : 1.2)) {
+      if (distance > explosionRadius + this.getEnemyHitRadius(enemy) * 0.65) {
         continue;
       }
 
@@ -1699,7 +2107,7 @@ export class TankGame {
 
   private updateUpgradeOverlay() {
     this.upgradeTitle.textContent = `Wave ${this.currentWave} Cleared`;
-    this.upgradeSubtitle.textContent = `Armor restored to full. Choose one upgrade before wave ${this.currentWave + 1}. Charged shots explode on impact, and heavy attack planes appear after wave 5.`;
+    this.upgradeSubtitle.textContent = `Armor restored to full. Choose one upgrade before wave ${this.currentWave + 1}. Heavy attack planes appear after wave 5, and every 10th wave deploys a fortress tank with radial cannons, rear tank ramps, and infantry doors.`;
   }
 
   private showHitMarker() {

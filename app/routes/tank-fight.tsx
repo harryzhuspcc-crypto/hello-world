@@ -100,8 +100,9 @@ export default function TankFight() {
               Command a battle tank across the open plain, survive escalating waves, and unlock
               upgrades between rounds. Use WASD for directional movement, E and Q to rise or drop,
               and move the mouse to aim after starting the battle. Hold left click to charge a
-              glowing explosive shell, then release to blast tanks and heavy attack planes. Every 5
-              kills charges your Shift special, and Tab swaps between Strike and Wave modes.
+              glowing explosive shell, then release to blast tanks and heavy attack planes. Every 10th
+              wave brings a fortress tank with cannons on every side, rear tank ramps, and infantry doors.
+              Every 5 kills charges your Shift special, and Tab swaps between Strike and Wave modes.
             </p>
 
             <div className="controls-grid">
