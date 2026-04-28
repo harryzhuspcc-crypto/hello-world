@@ -4,7 +4,7 @@ import * as THREE from "three";
 
 import type { Route } from "./+types/plus";
 
-type PlusGame = "menu" | "tank" | "plane" | "mario";
+type PlusGame = "plans" | "menu" | "tank" | "plane" | "mario";
 
 type Keys = Set<string>;
 
@@ -1175,6 +1175,102 @@ function MarioPlusGame({ onMenu }: { onMenu: () => void }) {
   return <PlusShell title="Mario Plus" subtitle="12 harder obby stages + lucky blocks" onMenu={onMenu}><canvas ref={canvasRef} /></PlusShell>;
 }
 
+function PlusPlanScreen({ continueToPlus }: { continueToPlus: () => void }) {
+  const plans = [
+    {
+      name: "Free Trial",
+      price: "$0",
+      detail: "Try everything first",
+      badge: "Decor only",
+      button: "Start Free Trial",
+    },
+    {
+      name: "Plus Forever",
+      price: "$3",
+      detail: "Pay once and play forever",
+      badge: "Same access",
+      button: "Choose $3 Plan",
+    },
+    {
+      name: "Ultra Forever",
+      price: "$9",
+      detail: "Premium-looking forever pass",
+      badge: "Same access",
+      button: "Choose $9 Plan",
+    },
+  ];
+
+  return (
+    <main className="relative min-h-screen overflow-hidden bg-slate-950 px-6 py-8 text-white sm:px-10 lg:px-16">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(250,204,21,0.25),_transparent_34%),radial-gradient(circle_at_80%_20%,_rgba(56,189,248,0.18),_transparent_28%),linear-gradient(135deg,_#020617_0%,_#111827_48%,_#2f1d05_100%)]" />
+      <section className="relative mx-auto flex min-h-[calc(100vh-4rem)] max-w-6xl flex-col justify-center">
+        <nav className="mb-12 flex items-center justify-between rounded-full border border-amber-200/20 bg-white/5 px-5 py-3 shadow-2xl shadow-black/20 backdrop-blur">
+          <Link className="text-sm font-bold uppercase tracking-[0.24em] text-white/80 hover:text-white" to="/">← Back to Lobby</Link>
+          <span className="rounded-full bg-amber-300 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-slate-950">GET PLUS</span>
+        </nav>
+
+        <div className="max-w-4xl">
+          <p className="text-sm font-black uppercase tracking-[0.35em] text-amber-200">Choose your Plus pass</p>
+          <h1 className="mt-4 text-6xl font-black tracking-tight sm:text-7xl">Pick any option</h1>
+          <p className="mt-6 text-xl leading-8 text-slate-300">
+            Plus adds bigger campaign-style versions of the arcade: 12-stage Tank missions, 12-stage Plane missions,
+            and Mario Plus worlds with harder obbys, lucky blocks, fire flowers, and fireballs.
+          </p>
+          <div className="mt-6 rounded-[1.5rem] border border-white/10 bg-white/[0.07] p-5 text-slate-200 shadow-xl shadow-black/20 backdrop-blur">
+            <h2 className="text-lg font-black text-white">What does Plus do?</h2>
+            <ul className="mt-3 grid gap-2 text-sm leading-6 sm:grid-cols-3">
+              <li><strong className="text-amber-200">Tank Plus:</strong> run-through 3D tank stages with ambushes and boss tanks.</li>
+              <li><strong className="text-cyan-200">Plane Plus:</strong> stage-based sky missions with boss planes.</li>
+              <li><strong className="text-orange-200">Mario Plus:</strong> harder 2D stages, reachable coins, lucky blocks, and fireballs.</li>
+            </ul>
+            <p className="mt-4 rounded-2xl border border-cyan-200/15 bg-cyan-300/10 p-3 text-sm font-bold text-cyan-100">
+              For now this is just a decorative choice screen: Free Trial, $3, and $9 all open the same Plus games.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-12 grid gap-5 lg:grid-cols-3">
+          {plans.map((plan, index) => (
+            <button
+              key={plan.name}
+              className={`group rounded-[1.75rem] border p-6 text-left shadow-xl shadow-black/20 backdrop-blur transition hover:-translate-y-2 hover:bg-white/[0.12] ${
+                index === 1
+                  ? "border-amber-200/40 bg-amber-300/[0.13]"
+                  : "border-white/10 bg-white/[0.07]"
+              }`}
+              onClick={continueToPlus}
+              type="button"
+            >
+              <div className="mb-5 flex items-center justify-between gap-3">
+                <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-amber-100 ring-1 ring-white/10">
+                  {plan.badge}
+                </span>
+                {index === 1 && (
+                  <span className="rounded-full bg-amber-300 px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-slate-950">
+                    Popular
+                  </span>
+                )}
+              </div>
+              <h2 className="text-2xl font-black">{plan.name}</h2>
+              <div className="mt-5 flex items-end gap-2">
+                <span className="text-6xl font-black tracking-tight">{plan.price}</span>
+                <span className="pb-2 text-sm font-bold uppercase tracking-[0.18em] text-slate-300">forever</span>
+              </div>
+              <p className="mt-4 text-sm leading-6 text-slate-300">{plan.detail}</p>
+              <p className="mt-3 rounded-2xl border border-cyan-200/15 bg-cyan-300/10 p-3 text-sm font-bold text-cyan-100">
+                All plans currently do the same thing and open the same Plus menu.
+              </p>
+              <span className="mt-6 inline-block rounded-full bg-white px-5 py-3 text-xs font-black uppercase tracking-[0.18em] text-slate-950">
+                {plan.button}
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
+    </main>
+  );
+}
+
 function PlusMenu({ setGame }: { setGame: (game: PlusGame) => void }) {
   const cards = [
     { id: "tank" as const, title: "Tank Plus Campaign", desc: "12 street stages. Roll forward, stop at ambushes, clear infantry and tanks, then defeat a boss tank at each stage end.", accent: "from-lime-300 to-emerald-500" },
@@ -1211,9 +1307,10 @@ function PlusMenu({ setGame }: { setGame: (game: PlusGame) => void }) {
 }
 
 export default function Plus() {
-  const [game, setGame] = useState<PlusGame>("menu");
+  const [game, setGame] = useState<PlusGame>("plans");
   if (game === "tank") return <TankPlusGame onMenu={() => setGame("menu")} />;
   if (game === "plane") return <PlanePlusGame onMenu={() => setGame("menu")} />;
   if (game === "mario") return <MarioPlusGame onMenu={() => setGame("menu")} />;
-  return <PlusMenu setGame={setGame} />;
+  if (game === "menu") return <PlusMenu setGame={setGame} />;
+  return <PlusPlanScreen continueToPlus={() => setGame("menu")} />;
 }
