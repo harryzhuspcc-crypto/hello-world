@@ -4,7 +4,7 @@ import * as THREE from "three";
 
 import type { Route } from "./+types/plus";
 
-type PlusGame = "plans" | "menu" | "tank" | "plane" | "mario";
+type PlusGame = "plans" | "menu" | "tank" | "plane" | "mario" | "street";
 
 type Keys = Set<string>;
 
@@ -18,13 +18,14 @@ type Coin = { x: number; y: number; r: number; got: boolean };
 type Block = Rect & { used: boolean; reward: "coin" | "flower" };
 type Goomba = Rect & { vx: number; alive: boolean };
 type Flower = Rect & { vx: number; vy: number; active: boolean };
+type StreetEnemy = Rect & { kind: "thug" | "bruiser" | "boss"; hp: number; maxHp: number; lane: number; vx: number; cooldown: number; hitStun: number; damage: number; alive: boolean };
 
 export function meta({}: Route.MetaArgs) {
   return [
     { title: "GET PLUS | Harry's Game Center" },
     {
       name: "description",
-      content: "Plus campaign modes with stage-based tank, plane, and platformer adventures.",
+      content: "Plus and Pro campaign modes with stage-based tank, plane, platformer, and street fighting adventures.",
     },
   ];
 }
@@ -1175,6 +1176,311 @@ function MarioPlusGame({ onMenu }: { onMenu: () => void }) {
   return <PlusShell title="Mario Plus" subtitle="12 harder obby stages + lucky blocks" onMenu={onMenu}><canvas ref={canvasRef} /></PlusShell>;
 }
 
+function createStreetEnemies(stage: number): StreetEnemy[] {
+  const enemies: StreetEnemy[] = [];
+  const count = 3 + stage;
+  for (let i = 0; i < count; i += 1) {
+    const isBoss = i === count - 1 && (stage % 3 === 0 || stage === 10);
+    const isBruiser = isBoss || i % 4 === 2;
+    const kind: StreetEnemy["kind"] = isBoss ? "boss" : isBruiser ? "bruiser" : "thug";
+    const hp = kind === "boss" ? 120 + stage * 28 : kind === "bruiser" ? 48 + stage * 9 : 28 + stage * 6;
+    enemies.push({
+      x: 470 + i * 175,
+      y: 0,
+      w: kind === "boss" ? 64 : kind === "bruiser" ? 54 : 44,
+      h: kind === "boss" ? 92 : kind === "bruiser" ? 78 : 68,
+      kind,
+      hp,
+      maxHp: hp,
+      lane: (i % 3 - 1) * 34,
+      vx: 0,
+      cooldown: 0.7 + i * 0.18,
+      hitStun: 0,
+      damage: kind === "boss" ? 22 + stage * 2 : kind === "bruiser" ? 14 + stage : 9 + stage,
+      alive: true,
+    });
+  }
+  return enemies;
+}
+
+function StreetFightProGame({ onMenu }: { onMenu: () => void }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const stateRef = useRef({
+    stage: 1,
+    length: 1900,
+    x: 90,
+    lane: 0,
+    jump: 0,
+    jumpV: 0,
+    facing: 1,
+    hp: 120,
+    green: 100,
+    camera: 0,
+    cooldown: 0,
+    attackTimer: 0,
+    attackType: "none" as "none" | "punch" | "kick" | "special",
+    attackHit: false,
+    message: "Street Fight Pro: clear each block to advance.",
+    prevJ: false,
+    prevK: false,
+    prevI: false,
+    prevL: false,
+    enemies: createStreetEnemies(1),
+  });
+
+  const resetStage = (stage: number) => {
+    const s = stateRef.current;
+    Object.assign(s, {
+      stage,
+      length: 1750 + stage * 150,
+      x: 90,
+      lane: 0,
+      jump: 0,
+      jumpV: 0,
+      facing: 1,
+      cooldown: 0,
+      attackTimer: 0,
+      attackType: "none" as const,
+      attackHit: false,
+      message: stage > 10 ? "Street Fight Pro complete!" : `Stage ${stage}: fight through the street gang!`,
+      enemies: createStreetEnemies(stage),
+    });
+  };
+
+  useCanvasLoop(canvasRef, (ctx, w, h, dt, keys) => {
+    const s = stateRef.current;
+    const groundY = h - 112;
+    const playerW = 48;
+    const playerH = 76;
+    const playerY = groundY - playerH + s.lane - s.jump;
+
+    const jDown = keys.has("KeyJ");
+    const kDown = keys.has("KeyK");
+    const iDown = keys.has("KeyI");
+    const lDown = keys.has("KeyL");
+    const jPressed = jDown && !s.prevJ;
+    const kPressed = kDown && !s.prevK;
+    const iPressed = iDown && !s.prevI;
+    const lPressed = lDown && !s.prevL;
+    s.prevJ = jDown;
+    s.prevK = kDown;
+    s.prevI = iDown;
+    s.prevL = lDown;
+
+    ctx.clearRect(0, 0, w, h);
+    if (s.hp <= 0) {
+      ctx.fillStyle = "#171016";
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = "white";
+      ctx.textAlign = "center";
+      ctx.font = "900 48px Inter, sans-serif";
+      ctx.fillText("KNOCKED OUT", w / 2, h / 2 - 28);
+      ctx.font = "700 18px Inter, sans-serif";
+      ctx.fillText("Press I to restart Street Fight Pro", w / 2, h / 2 + 18);
+      if (iPressed) {
+        s.hp = 120;
+        s.green = 100;
+        resetStage(1);
+      }
+      return;
+    }
+    if (s.stage > 10) {
+      ctx.fillStyle = "#10251d";
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = "#7dff9d";
+      ctx.textAlign = "center";
+      ctx.font = "900 46px Inter, sans-serif";
+      ctx.fillText("STREET FIGHT PRO COMPLETE", w / 2, h / 2);
+      ctx.font = "700 18px Inter, sans-serif";
+      ctx.fillText("You cleared all 10 street stages.", w / 2, h / 2 + 36);
+      return;
+    }
+
+    const left = keys.has("KeyA") || keys.has("ArrowLeft");
+    const right = keys.has("KeyD") || keys.has("ArrowRight");
+    const up = keys.has("KeyW") || keys.has("ArrowUp");
+    const down = keys.has("KeyS") || keys.has("ArrowDown");
+    const move = 260;
+    if (left) { s.x -= move * dt; s.facing = -1; }
+    if (right) { s.x += move * dt; s.facing = 1; }
+    if (up) s.lane -= 170 * dt;
+    if (down) s.lane += 170 * dt;
+    s.x = clamp(s.x, 35, s.length - playerW - 60);
+    s.lane = clamp(s.lane, -72, 64);
+    if (kPressed && s.jump <= 0) {
+      s.jumpV = 610;
+      s.message = "Jump! Use K to hop over crowded fights.";
+    }
+    if (s.jump > 0 || s.jumpV > 0) {
+      s.jump += s.jumpV * dt;
+      s.jumpV -= 1500 * dt;
+      if (s.jump <= 0) { s.jump = 0; s.jumpV = 0; }
+    }
+
+    s.cooldown = Math.max(0, s.cooldown - dt);
+    if (s.attackTimer > 0) s.attackTimer = Math.max(0, s.attackTimer - dt);
+    if (s.attackTimer <= 0) { s.attackType = "none"; s.attackHit = false; }
+    if (jPressed && s.cooldown <= 0) {
+      s.green = Math.max(0, s.green - 8);
+      s.attackType = "punch";
+      s.attackTimer = 0.16;
+      s.attackHit = false;
+      s.cooldown = 0.22;
+      s.message = "Punch costs green health. Land hits to restore it.";
+    } else if (lPressed && s.cooldown <= 0) {
+      s.attackType = "kick";
+      s.attackTimer = 0.22;
+      s.attackHit = false;
+      s.cooldown = 0.36;
+      s.message = "Kick has longer reach and no green cost.";
+    } else if (iPressed && s.cooldown <= 0 && s.green >= 25) {
+      s.green = Math.max(0, s.green - 25);
+      s.attackType = "special";
+      s.attackTimer = 0.36;
+      s.attackHit = false;
+      s.cooldown = 0.72;
+      s.message = "Special move spends green health for a wide hit.";
+    } else if (iPressed && s.green < 25) {
+      s.message = "Need 25 green health for the special move.";
+    }
+
+    const player: Rect = { x: s.x, y: playerY, w: playerW, h: playerH };
+    const attackRange = s.attackType === "special" ? 138 : s.attackType === "kick" ? 82 : 62;
+    const attackDamage = s.attackType === "special" ? 34 : s.attackType === "kick" ? 16 : 12;
+    const attackBox: Rect = {
+      x: s.facing > 0 ? s.x + playerW - 6 : s.x - attackRange + 6,
+      y: playerY + 6,
+      w: attackRange,
+      h: playerH - 8,
+    };
+
+    for (const enemy of s.enemies) if (enemy.alive) {
+      enemy.hitStun = Math.max(0, enemy.hitStun - dt);
+      enemy.cooldown = Math.max(0, enemy.cooldown - dt);
+      const enemyY = groundY - enemy.h + enemy.lane;
+      enemy.y = enemyY;
+      if (enemy.hitStun <= 0) {
+        const dx = s.x - enemy.x;
+        const laneDiff = s.lane - enemy.lane;
+        if (Math.abs(dx) > 58) enemy.x += Math.sign(dx) * (enemy.kind === "boss" ? 78 : enemy.kind === "bruiser" ? 95 : 120) * dt;
+        if (Math.abs(laneDiff) > 10) enemy.lane += Math.sign(laneDiff) * 90 * dt;
+      }
+      enemy.x = clamp(enemy.x, 80, s.length - 100);
+
+      if (s.attackType !== "none" && s.attackTimer > 0 && !s.attackHit && overlap(attackBox, enemy)) {
+        enemy.hp -= attackDamage;
+        enemy.hitStun = s.attackType === "special" ? 0.48 : 0.26;
+        enemy.x += s.facing * (s.attackType === "special" ? 72 : 36);
+        s.green = clamp(s.green + (s.attackType === "special" ? 24 : s.attackType === "kick" ? 15 : 13), 0, 100);
+        s.attackHit = true;
+        s.message = "Hit confirmed! Green health restored.";
+        if (enemy.hp <= 0) {
+          enemy.alive = false;
+          s.green = clamp(s.green + 18, 0, 100);
+          s.message = enemy.kind === "boss" ? "Boss down! Keep moving." : "Enemy defeated. Green health restored.";
+        }
+      }
+
+      const enemyRect: Rect = { x: enemy.x, y: enemy.y, w: enemy.w, h: enemy.h };
+      if (enemy.alive && enemy.cooldown <= 0 && overlap(player, enemyRect) && s.jump < 20) {
+        s.hp -= enemy.damage;
+        s.green = 0;
+        s.x -= s.facing * 54;
+        enemy.cooldown = enemy.kind === "boss" ? 0.75 : 1.05;
+        s.message = `Enemy hit! All green health was lost, plus ${enemy.damage} red damage.`;
+      }
+    }
+
+    s.enemies = s.enemies.filter((enemy) => enemy.alive || enemy.hp > -35);
+    if (s.enemies.every((enemy) => !enemy.alive)) {
+      s.hp = Math.min(120, s.hp + 18);
+      s.green = 100;
+      resetStage(s.stage + 1);
+    }
+    s.camera = clamp(s.x - w * 0.36, 0, Math.max(0, s.length - w));
+
+    const sky = ctx.createLinearGradient(0, 0, 0, h);
+    sky.addColorStop(0, "#16172d");
+    sky.addColorStop(1, "#332019");
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, w, h);
+    ctx.save();
+    ctx.translate(-s.camera, 0);
+    for (let bx = -200; bx < s.length + 300; bx += 180) {
+      ctx.fillStyle = bx % 360 === 0 ? "#25253f" : "#1d2135";
+      ctx.fillRect(bx, 70 + (bx % 4) * 12, 142, groundY - 130);
+      ctx.fillStyle = "rgba(255,218,105,.35)";
+      for (let wy = 110; wy < groundY - 170; wy += 54) for (let wx = bx + 18; wx < bx + 116; wx += 42) ctx.fillRect(wx, wy, 18, 24);
+    }
+    ctx.fillStyle = "#22252d";
+    ctx.fillRect(-200, groundY - 82, s.length + 400, 190);
+    ctx.fillStyle = "#3b3f46";
+    ctx.fillRect(-200, groundY - 106, s.length + 400, 24);
+    ctx.strokeStyle = "rgba(255,255,255,.16)";
+    ctx.setLineDash([22, 18]);
+    ctx.beginPath();
+    ctx.moveTo(-200, groundY - 20);
+    ctx.lineTo(s.length + 300, groundY - 20);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = "#facc15";
+    ctx.font = "900 28px Inter, sans-serif";
+    ctx.fillText(`STAGE ${s.stage}`, s.length - 220, groundY - 130);
+
+    const drawFighter = (x: number, y: number, facing: number, body: string, head: string, isPlayer = false) => {
+      ctx.save();
+      ctx.translate(x + (facing < 0 ? 48 : 0), y);
+      ctx.scale(facing, 1);
+      ctx.fillStyle = head;
+      ctx.fillRect(14, 0, 20, 20);
+      ctx.fillStyle = body;
+      ctx.fillRect(8, 22, 32, 38);
+      ctx.fillStyle = "#111827";
+      ctx.fillRect(8, 60, 12, 18);
+      ctx.fillRect(28, 60, 12, 18);
+      ctx.fillStyle = isPlayer ? "#bbf7d0" : "#fecaca";
+      ctx.fillRect(40, 28, 18, 9);
+      if (isPlayer && s.attackType !== "none" && s.attackTimer > 0) {
+        ctx.fillStyle = s.attackType === "special" ? "rgba(34,211,238,.55)" : "rgba(250,204,21,.75)";
+        ctx.fillRect(52, 24, attackRange, s.attackType === "special" ? 34 : 16);
+      }
+      ctx.restore();
+    };
+
+    const sorted = [...s.enemies].sort((a, b) => a.lane - b.lane);
+    for (const enemy of sorted) if (enemy.alive) {
+      const ex = enemy.x;
+      const ey = groundY - enemy.h + enemy.lane;
+      drawFighter(ex, ey, enemy.x > s.x ? -1 : 1, enemy.kind === "boss" ? "#7f1d1d" : enemy.kind === "bruiser" ? "#7c3aed" : "#475569", "#f0b68a");
+      ctx.fillStyle = "#7f1d1d";
+      ctx.fillRect(ex - 6, ey - 14, enemy.w + 12, 6);
+      ctx.fillStyle = "#22c55e";
+      ctx.fillRect(ex - 6, ey - 14, (enemy.w + 12) * Math.max(0, enemy.hp / enemy.maxHp), 6);
+    }
+    drawFighter(s.x, playerY, s.facing, "#2563eb", "#f7c59f", true);
+    ctx.restore();
+
+    ctx.fillStyle = "rgba(0,0,0,.62)";
+    ctx.fillRect(20, h - 132, 670, 108);
+    ctx.fillStyle = "#7f1d1d";
+    ctx.fillRect(42, h - 104, 220, 16);
+    ctx.fillStyle = "#ef4444";
+    ctx.fillRect(42, h - 104, 220 * Math.max(0, s.hp / 120), 16);
+    ctx.fillStyle = "#064e3b";
+    ctx.fillRect(42, h - 78, 220, 16);
+    ctx.fillStyle = "#22c55e";
+    ctx.fillRect(42, h - 78, 220 * Math.max(0, s.green / 100), 16);
+    ctx.fillStyle = "white";
+    ctx.font = "900 20px Inter, sans-serif";
+    ctx.fillText(`Street Fight Pro • Stage ${s.stage} / 10`, 282, h - 94);
+    ctx.font = "700 14px Inter, sans-serif";
+    ctx.fillText(`Red HP ${Math.max(0, Math.round(s.hp))} • Green health ${Math.round(s.green)} • ${s.message}`, 282, h - 68);
+    ctx.fillText("WASD move • J punch (-green) • K jump • I special • L kick • Hit enemies to restore green", 42, h - 38);
+  }, []);
+
+  return <PlusShell title="Street Fight Pro" subtitle="$3 Pro slot: stage-by-stage street fighting" onMenu={onMenu}><canvas ref={canvasRef} /></PlusShell>;
+}
+
 function PlusPlanScreen({ continueToPlus }: { continueToPlus: () => void }) {
   const plans = [
     {
@@ -1187,8 +1493,8 @@ function PlusPlanScreen({ continueToPlus }: { continueToPlus: () => void }) {
     {
       name: "Plus Forever",
       price: "$3",
-      detail: "Pay once and play forever",
-      badge: "Same access",
+      detail: "Pay once and play forever — Pro slot shows Street Fight Pro",
+      badge: "$3 Pro slot",
       button: "Choose $3 Plan",
     },
     {
@@ -1214,14 +1520,15 @@ function PlusPlanScreen({ continueToPlus }: { continueToPlus: () => void }) {
           <h1 className="mt-4 text-6xl font-black tracking-tight sm:text-7xl">Pick any option</h1>
           <p className="mt-6 text-xl leading-8 text-slate-300">
             Plus adds bigger campaign-style versions of the arcade: 12-stage Tank missions, 12-stage Plane missions,
-            and Mario Plus worlds with harder obbys, lucky blocks, fire flowers, and fireballs.
+            Mario Plus worlds, and a new $3 Pro-slot Street Fight game.
           </p>
           <div className="mt-6 rounded-[1.5rem] border border-white/10 bg-white/[0.07] p-5 text-slate-200 shadow-xl shadow-black/20 backdrop-blur">
             <h2 className="text-lg font-black text-white">What does Plus do?</h2>
-            <ul className="mt-3 grid gap-2 text-sm leading-6 sm:grid-cols-3">
+            <ul className="mt-3 grid gap-2 text-sm leading-6 sm:grid-cols-4">
               <li><strong className="text-amber-200">Tank Plus:</strong> run-through 3D tank stages with ambushes and boss tanks.</li>
               <li><strong className="text-cyan-200">Plane Plus:</strong> stage-based sky missions with boss planes.</li>
               <li><strong className="text-orange-200">Mario Plus:</strong> harder 2D stages, reachable coins, lucky blocks, and fireballs.</li>
+              <li><strong className="text-emerald-200">Street Fight Pro:</strong> stage-by-stage street fights with punch, kick, jump, and special moves.</li>
             </ul>
             <p className="mt-4 rounded-2xl border border-cyan-200/15 bg-cyan-300/10 p-3 text-sm font-bold text-cyan-100">
               For now this is just a decorative choice screen: Free Trial, $3, and $9 all open the same Plus games.
@@ -1260,6 +1567,11 @@ function PlusPlanScreen({ continueToPlus }: { continueToPlus: () => void }) {
               <p className="mt-3 rounded-2xl border border-cyan-200/15 bg-cyan-300/10 p-3 text-sm font-bold text-cyan-100">
                 All plans currently do the same thing and open the same Plus menu.
               </p>
+              {index === 1 && (
+                <div className="mt-3 rounded-2xl border border-emerald-200/25 bg-emerald-300/10 p-3 text-sm font-bold text-emerald-100">
+                  New under the $3 Pro slot: Street Fight Pro — WASD move, J punch, K jump, I special, L kick.
+                </div>
+              )}
               <span className="mt-6 inline-block rounded-full bg-white px-5 py-3 text-xs font-black uppercase tracking-[0.18em] text-slate-950">
                 {plan.button}
               </span>
@@ -1276,6 +1588,7 @@ function PlusMenu({ setGame }: { setGame: (game: PlusGame) => void }) {
     { id: "tank" as const, title: "Tank Plus Campaign", desc: "12 street stages. Roll forward, stop at ambushes, clear infantry and tanks, then defeat a boss tank at each stage end.", accent: "from-lime-300 to-emerald-500" },
     { id: "plane" as const, title: "Plane Plus Campaign", desc: "12 sky sorties with no infantry: fighters and bombers rush your lane, then a boss plane guards every stage finish.", accent: "from-cyan-300 to-blue-500" },
     { id: "mario" as const, title: "Mario Plus Worlds", desc: "12 harder obby stages with reachable coins, reachable lucky blocks, fire flowers, and fireballs.", accent: "from-amber-300 to-orange-500" },
+    { id: "street" as const, title: "Street Fight Pro", desc: "$3 Pro-slot game. Fight stage by stage through city streets with WASD movement, J punch, K jump, I special, and L kick.", accent: "from-emerald-300 to-green-600" },
   ];
 
   return (
@@ -1291,7 +1604,7 @@ function PlusMenu({ setGame }: { setGame: (game: PlusGame) => void }) {
           <h1 className="mt-4 text-6xl font-black tracking-tight sm:text-7xl">Stage-by-stage campaigns</h1>
           <p className="mt-6 text-xl leading-8 text-slate-300">Pick a Plus mode. These are campaign versions built around stage progression, boss endings, and new power mechanics.</p>
         </div>
-        <div className="mt-12 grid gap-5 lg:grid-cols-3">
+        <div className="mt-12 grid gap-5 lg:grid-cols-4">
           {cards.map((card) => (
             <button key={card.id} className="group rounded-[1.75rem] border border-white/10 bg-white/[0.07] p-6 text-left shadow-xl shadow-black/20 backdrop-blur transition hover:-translate-y-2 hover:border-white/25 hover:bg-white/[0.11]" onClick={() => setGame(card.id)} type="button">
               <div className={`mb-6 h-16 w-16 rounded-2xl bg-gradient-to-br ${card.accent} shadow-lg transition group-hover:rotate-3 group-hover:scale-105`} />
@@ -1311,6 +1624,7 @@ export default function Plus() {
   if (game === "tank") return <TankPlusGame onMenu={() => setGame("menu")} />;
   if (game === "plane") return <PlanePlusGame onMenu={() => setGame("menu")} />;
   if (game === "mario") return <MarioPlusGame onMenu={() => setGame("menu")} />;
+  if (game === "street") return <StreetFightProGame onMenu={() => setGame("menu")} />;
   if (game === "menu") return <PlusMenu setGame={setGame} />;
   return <PlusPlanScreen continueToPlus={() => setGame("menu")} />;
 }
