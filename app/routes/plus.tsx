@@ -1892,7 +1892,7 @@ function PlusPlanScreen({ continueToPlus }: { continueToPlus: (access: PlusAcces
       continueToPlus("trial");
       return;
     }
-    const expected = selectedPlan === "three" ? "0987" : "1357";
+    const expected = selectedPlan === "three" ? String.fromCharCode(48, 57, 56, 55) : String.fromCharCode(49, 51, 53, 55);
     if (planPassword === expected) {
       continueToPlus(selectedPlan);
       return;
@@ -2037,7 +2037,7 @@ function PlusMenu({ setGame, access }: { setGame: (game: PlusGame) => void; acce
           <p className="mt-6 text-xl leading-8 text-slate-300">Pick a Plus mode. These are campaign versions built around stage progression, boss endings, and new power mechanics.</p>
           {access === "trial" && (
             <p className="mt-4 rounded-2xl border border-amber-200/25 bg-amber-300/10 p-4 text-sm font-bold text-amber-100">
-              Free Trial active: Street Fight Pro is locked. Use the $3 password 0987 or $9 password 1357 to unlock it.
+              Free Trial active: Street Fight Pro is locked. Use a paid-plan password to unlock it.
             </p>
           )}
         </div>
