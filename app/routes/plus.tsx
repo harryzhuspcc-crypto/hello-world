@@ -1853,8 +1853,12 @@ function StreetFightProGame({ onMenu }: { onMenu: () => void }) {
 }
 
 function PlusPlanScreen({ continueToPlus }: { continueToPlus: () => void }) {
+  const [selectedPlan, setSelectedPlan] = useState<"trial" | "three" | "nine" | null>(null);
+  const [planPassword, setPlanPassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
   const plans = [
     {
+      id: "trial" as const,
       name: "Free Trial",
       price: "$0",
       detail: "Try everything first",
@@ -1862,6 +1866,7 @@ function PlusPlanScreen({ continueToPlus }: { continueToPlus: () => void }) {
       button: "Start Free Trial",
     },
     {
+      id: "three" as const,
       name: "Plus Forever",
       price: "$3",
       detail: "Pay once and play forever — Pro slot shows Street Fight Pro",
@@ -1869,6 +1874,7 @@ function PlusPlanScreen({ continueToPlus }: { continueToPlus: () => void }) {
       button: "Choose $3 Plan",
     },
     {
+      id: "nine" as const,
       name: "Ultra Forever",
       price: "$9",
       detail: "Premium-looking forever pass",
@@ -1876,6 +1882,23 @@ function PlusPlanScreen({ continueToPlus }: { continueToPlus: () => void }) {
       button: "Choose $9 Plan",
     },
   ];
+  const selectedPlanInfo = plans.find((plan) => plan.id === selectedPlan);
+
+  const submitPlanPassword = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!selectedPlan) return;
+    if (selectedPlan === "trial") {
+      continueToPlus();
+      return;
+    }
+    const expected = selectedPlan === "three" ? "0987" : "1357";
+    if (planPassword === expected) {
+      continueToPlus();
+      return;
+    }
+    setPasswordError("Wrong password");
+    setPlanPassword("");
+  };
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-slate-950 px-6 py-8 text-white sm:px-10 lg:px-16">
@@ -1916,7 +1939,11 @@ function PlusPlanScreen({ continueToPlus }: { continueToPlus: () => void }) {
                   ? "border-amber-200/40 bg-amber-300/[0.13]"
                   : "border-white/10 bg-white/[0.07]"
               }`}
-              onClick={continueToPlus}
+              onClick={() => {
+                setSelectedPlan(plan.id);
+                setPlanPassword("");
+                setPasswordError("");
+              }}
               type="button"
             >
               <div className="mb-5 flex items-center justify-between gap-3">
@@ -1949,6 +1976,36 @@ function PlusPlanScreen({ continueToPlus }: { continueToPlus: () => void }) {
             </button>
           ))}
         </div>
+
+        {selectedPlanInfo && (
+          <form className="mt-8 max-w-md rounded-[1.5rem] border border-white/10 bg-black/45 p-5 shadow-2xl shadow-black/30 backdrop-blur" onSubmit={submitPlanPassword}>
+            <p className="text-sm font-black uppercase tracking-[0.22em] text-amber-200">{selectedPlanInfo.name}</p>
+            <label className="mt-3 block text-sm font-bold text-slate-200" htmlFor="plan-password">
+              {selectedPlan === "three" ? "Enter the $3 password" : selectedPlan === "nine" ? "Enter the $9 password" : "Free trial: no extra password needed"}
+            </label>
+            <input
+              autoFocus
+              className="mt-3 w-full rounded-2xl border border-white/15 bg-white px-4 py-3 text-center text-xl font-black text-slate-950 outline-none focus:border-amber-300"
+              id="plan-password"
+              onChange={(event) => {
+                setPlanPassword(event.target.value);
+                setPasswordError("");
+              }}
+              placeholder={selectedPlan === "trial" ? "Press Enter" : "Password"}
+              type="password"
+              value={planPassword}
+            />
+            {passwordError && <p className="mt-3 text-sm font-bold text-red-300">{passwordError}</p>}
+            <div className="mt-4 flex gap-3">
+              <button className="rounded-full bg-amber-300 px-5 py-3 text-xs font-black uppercase tracking-[0.18em] text-slate-950" type="submit">
+                Unlock
+              </button>
+              <button className="rounded-full border border-white/15 px-5 py-3 text-xs font-black uppercase tracking-[0.18em] text-white" onClick={() => setSelectedPlan(null)} type="button">
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
       </section>
     </main>
   );

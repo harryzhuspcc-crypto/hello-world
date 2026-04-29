@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   isRouteErrorResponse,
   Links,
@@ -41,7 +42,52 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
+const GAME_CENTER_PASSWORD = "1234";
+
+function GameCenterPasswordGate({ onUnlock }: { onUnlock: () => void }) {
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (password === GAME_CENTER_PASSWORD) {
+      sessionStorage.setItem("game-center-unlocked", "yes");
+      onUnlock();
+      return;
+    }
+    setError("Wrong password");
+    setPassword("");
+  };
+
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-white text-slate-950">
+      <form className="w-72" onSubmit={submit}>
+        <input
+          autoFocus
+          aria-label="Game center password"
+          className="w-full rounded-xl border border-slate-300 px-4 py-3 text-center text-xl font-bold outline-none focus:border-slate-900"
+          onChange={(event) => {
+            setPassword(event.target.value);
+            setError("");
+          }}
+          placeholder="Password"
+          type="password"
+          value={password}
+        />
+        {error && <p className="mt-3 text-center text-sm font-bold text-red-600">{error}</p>}
+      </form>
+    </main>
+  );
+}
+
 export default function App() {
+  const [unlocked, setUnlocked] = useState(false);
+
+  useEffect(() => {
+    if (sessionStorage.getItem("game-center-unlocked") === "yes") setUnlocked(true);
+  }, []);
+
+  if (!unlocked) return <GameCenterPasswordGate onUnlock={() => setUnlocked(true)} />;
   return <Outlet />;
 }
 
