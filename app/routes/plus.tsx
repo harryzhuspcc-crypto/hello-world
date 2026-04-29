@@ -619,22 +619,33 @@ function animateStreetFighterMesh(mesh: THREE.Object3D, dt: number, options: { m
     limbs.rightArm.position.z = THREE.MathUtils.lerp(limbs.rightArm.position.z, -0.62 * limbs.scale, dt * 18);
     torsoZ += 0.2;
   } else if (options.attacking && options.attack === "kick") {
-    rightLegX = -1.35;
-    limbs.rightLeg.position.z = THREE.MathUtils.lerp(limbs.rightLeg.position.z, -0.72 * limbs.scale, dt * 18);
-    leftArmX = 0.7;
-    rightArmX = 0.45;
+    rightLegX = -1.72;
+    leftLegX = 0.42;
+    limbs.rightLeg.position.z = THREE.MathUtils.lerp(limbs.rightLeg.position.z, -1.05 * limbs.scale, dt * 22);
+    limbs.rightLeg.position.y = THREE.MathUtils.lerp(limbs.rightLeg.position.y, 0.95 * limbs.scale, dt * 18);
+    leftArmX = 0.85;
+    rightArmX = 0.62;
+    torsoZ += 0.18;
   } else if (options.attacking && options.attack === "special") {
-    leftArmX = -1.55;
-    rightArmX = -1.55;
-    leftLegX = -0.25;
-    rightLegX = 0.25;
-    mesh.rotation.z = Math.sin(t * 2.4) * 0.12;
+    leftArmX = -1.35;
+    rightArmX = -1.35;
+    leftLegX = -1.45;
+    rightLegX = -1.45;
+    limbs.leftLeg.position.z = THREE.MathUtils.lerp(limbs.leftLeg.position.z, 0.82 * limbs.scale, dt * 22);
+    limbs.rightLeg.position.z = THREE.MathUtils.lerp(limbs.rightLeg.position.z, -0.82 * limbs.scale, dt * 22);
+    limbs.leftLeg.position.y = THREE.MathUtils.lerp(limbs.leftLeg.position.y, 0.88 * limbs.scale, dt * 18);
+    limbs.rightLeg.position.y = THREE.MathUtils.lerp(limbs.rightLeg.position.y, 0.88 * limbs.scale, dt * 18);
+    mesh.rotation.y += t * 0.55;
+    mesh.rotation.z = Math.sin(t * 2.4) * 0.18;
   } else if (options.enemySwing) {
     rightArmX = -1.1;
     torsoZ += 0.16;
   } else {
     limbs.rightArm.position.z = THREE.MathUtils.lerp(limbs.rightArm.position.z, -0.04, dt * 10);
+    limbs.leftLeg.position.z = THREE.MathUtils.lerp(limbs.leftLeg.position.z, 0, dt * 10);
     limbs.rightLeg.position.z = THREE.MathUtils.lerp(limbs.rightLeg.position.z, 0, dt * 10);
+    limbs.leftLeg.position.y = THREE.MathUtils.lerp(limbs.leftLeg.position.y, 0.55 * limbs.scale, dt * 10);
+    limbs.rightLeg.position.y = THREE.MathUtils.lerp(limbs.rightLeg.position.y, 0.55 * limbs.scale, dt * 10);
     mesh.rotation.z = THREE.MathUtils.lerp(mesh.rotation.z, 0, dt * 8);
   }
   limbs.leftLeg.rotation.x = THREE.MathUtils.lerp(limbs.leftLeg.rotation.x, leftLegX, dt * 12);
@@ -1400,12 +1411,11 @@ function StreetFightPro2DGame({ onMenu, on3d }: { onMenu: () => void; on3d?: () 
     if (s.attackTimer > 0) s.attackTimer = Math.max(0, s.attackTimer - dt);
     if (s.attackTimer <= 0) { s.attackType = "none"; s.attackHit = false; }
     if (jPressed && s.cooldown <= 0) {
-      s.green = Math.max(0, s.green - 8);
       s.attackType = "punch";
       s.attackTimer = 0.16;
       s.attackHit = false;
       s.cooldown = 0.22;
-      s.message = "Punch costs green health. Land hits to restore it.";
+      s.message = "Punch is free. Land hits to restore green health.";
     } else if (lPressed && s.cooldown <= 0) {
       s.attackType = "kick";
       s.attackTimer = 0.22;
@@ -1418,7 +1428,7 @@ function StreetFightPro2DGame({ onMenu, on3d }: { onMenu: () => void; on3d?: () 
       s.attackTimer = 0.36;
       s.attackHit = false;
       s.cooldown = 0.72;
-      s.message = "Special move spends green health for a wide hit.";
+      s.message = "Tornado kick special spends green health for a wide hit.";
     } else if (iPressed && s.green < 25) {
       s.message = "Need 25 green health for the special move.";
     }
@@ -1450,7 +1460,7 @@ function StreetFightPro2DGame({ onMenu, on3d }: { onMenu: () => void; on3d?: () 
         enemy.hp -= attackDamage;
         enemy.hitStun = s.attackType === "special" ? 0.48 : 0.26;
         enemy.x += s.facing * (s.attackType === "special" ? 72 : 36);
-        s.green = clamp(s.green + (s.attackType === "special" ? 24 : s.attackType === "kick" ? 15 : 13), 0, 100);
+        s.green = clamp(s.green + (s.attackType === "special" ? 0 : s.attackType === "kick" ? 15 : 13), 0, 100);
         s.attackHit = true;
         s.message = "Hit confirmed! Green health restored.";
         if (enemy.hp <= 0) {
@@ -1463,10 +1473,9 @@ function StreetFightPro2DGame({ onMenu, on3d }: { onMenu: () => void; on3d?: () 
       const enemyRect: Rect = { x: enemy.x, y: enemy.y, w: enemy.w, h: enemy.h };
       if (enemy.alive && enemy.cooldown <= 0 && overlap(player, enemyRect) && s.jump < 20) {
         s.hp -= enemy.damage;
-        s.green = 0;
         s.x -= s.facing * 54;
         enemy.cooldown = enemy.kind === "boss" ? 0.75 : 1.05;
-        s.message = `Enemy hit! All green health was lost, plus ${enemy.damage} red damage.`;
+        s.message = `Enemy hit! You lost ${enemy.damage} red health.`;
       }
     }
 
@@ -1554,7 +1563,7 @@ function StreetFightPro2DGame({ onMenu, on3d }: { onMenu: () => void; on3d?: () 
     ctx.fillText(`Street Fight Pro • Stage ${s.stage} / 10`, 282, h - 94);
     ctx.font = "700 14px Inter, sans-serif";
     ctx.fillText(`Red HP ${Math.max(0, Math.round(s.hp))} • Green health ${Math.round(s.green)} • ${s.message}`, 282, h - 68);
-    ctx.fillText("WASD move • J punch (-green) • K jump • I special • L kick • Hit enemies to restore green", 42, h - 38);
+    ctx.fillText("WASD move • J punch • K jump • I tornado kick (-green) • L kick • Hit enemies to restore green", 42, h - 38);
   }, []);
 
   return <PlusShell title="Street Fight Pro 2D" subtitle="$3 Pro slot: classic flat street fighting" onMenu={onMenu} modeAction={on3d ? <button className="rounded-full border border-cyan-200/25 bg-cyan-300/15 px-4 py-2 text-sm font-bold uppercase tracking-[0.18em] text-cyan-100 shadow-2xl backdrop-blur transition hover:bg-cyan-300/25" onClick={on3d} type="button">3D Version</button> : undefined}><canvas ref={canvasRef} /></PlusShell>;
@@ -1725,18 +1734,17 @@ function StreetFightPro3DCanvas() {
         game.attackTimer = Math.max(0, game.attackTimer - dt);
         if (game.attackTimer <= 0) { game.attackType = "none"; game.attackHit = false; }
         if (jPressed && game.cooldown <= 0) {
-          game.green = Math.max(0, game.green - 8);
-          Object.assign(game, { attackType: "punch" as const, attackTimer: 0.18, attackHit: false, cooldown: 0.24, message: "J punch costs green health. Hit enemies to restore it." });
+          Object.assign(game, { attackType: "punch" as const, attackTimer: 0.18, attackHit: false, cooldown: 0.24, message: "J punch: quick Streets-of-Rage-style combo starter." });
         } else if (lPressed && game.cooldown <= 0) {
-          Object.assign(game, { attackType: "kick" as const, attackTimer: 0.24, attackHit: false, cooldown: 0.38, message: "L kick has longer range." });
+          Object.assign(game, { attackType: "kick" as const, attackTimer: 0.32, attackHit: false, cooldown: 0.42, message: "L kick: watch the leg extend for a longer-range hit." });
         } else if (iPressed && game.cooldown <= 0 && game.green >= 25) {
           game.green -= 25;
-          Object.assign(game, { attackType: "special" as const, attackTimer: 0.42, attackHit: false, cooldown: 0.82, message: "I special spends green health for a wide 3D blast." });
+          Object.assign(game, { attackType: "special" as const, attackTimer: 0.68, attackHit: false, cooldown: 0.95, message: "I special: tornado kick! It spends green health." });
         } else if (iPressed && game.green < 25) game.message = "Need 25 green health for special.";
 
         const forward = new THREE.Vector3(Math.sin(game.facing), 0, -Math.cos(game.facing));
-        const attackRange = game.attackType === "special" ? 5.6 : game.attackType === "kick" ? 3.45 : 2.65;
-        const attackDamage = game.attackType === "special" ? 36 : game.attackType === "kick" ? 17 : 12;
+        const attackRange = game.attackType === "special" ? 5.25 : game.attackType === "kick" ? 3.65 : 2.65;
+        const attackDamage = game.attackType === "special" ? 22 : game.attackType === "kick" ? 18 : 12;
         animateStreetFighterMesh(player, dt, { moving: isMoving, jumping: game.jump > 0.05, attack: game.attackType, attacking: game.attackType !== "none" && game.attackTimer > 0 });
 
         for (let i = enemies.length - 1; i >= 0; i -= 1) {
@@ -1754,17 +1762,20 @@ function StreetFightPro3DCanvas() {
           enemy.healthBar.position.copy(enemy.mesh.position).add(new THREE.Vector3(0, enemy.kind === "boss" ? 4.6 : enemy.kind === "bruiser" ? 3.85 : 3.3, 0));
           enemy.healthBar.lookAt(camera.position);
           enemy.healthFill.scale.x = Math.max(0.03, enemy.hp / enemy.maxHp);
-          if (game.attackType !== "none" && game.attackTimer > 0 && !game.attackHit) {
+          if (game.attackType !== "none" && game.attackTimer > 0 && (game.attackType === "special" || !game.attackHit)) {
             const toEnemy = enemy.mesh.position.clone().sub(player.position); toEnemy.y = 0;
-            const rangeOk = toEnemy.length() < attackRange + (enemy.kind === "boss" ? 1.2 : 0.4);
+            const enemyDistance = toEnemy.length();
+            const rangeOk = enemyDistance < attackRange + (enemy.kind === "boss" ? 1.2 : 0.4);
             const angleOk = game.attackType === "special" || toEnemy.normalize().dot(forward) > 0.32;
-            if (rangeOk && angleOk) {
+            const canHitThisEnemy = game.attackType !== "special" || enemy.hitStun <= 0;
+            if (rangeOk && angleOk && canHitThisEnemy) {
               enemy.hp -= attackDamage;
-              enemy.hitStun = game.attackType === "special" ? 0.55 : 0.3;
-              enemy.mesh.position.addScaledVector(forward, game.attackType === "special" ? 2.2 : 1.1);
-              game.green = clamp(game.green + (game.attackType === "special" ? 24 : game.attackType === "kick" ? 15 : 13), 0, 100);
-              game.attackHit = true;
-              game.message = "3D hit confirmed! Green health restored.";
+              enemy.hitStun = game.attackType === "special" ? 0.58 : 0.3;
+              const knockDir = game.attackType === "special" && enemyDistance > 0 ? toEnemy.normalize() : forward;
+              enemy.mesh.position.addScaledVector(knockDir, game.attackType === "special" ? 2.0 : 1.1);
+              game.green = clamp(game.green + (game.attackType === "special" ? 0 : game.attackType === "kick" ? 15 : 13), 0, 100);
+              if (game.attackType !== "special") game.attackHit = true;
+              game.message = game.attackType === "special" ? "Tornado kick hit! Green was spent for the special." : "Hit confirmed! Green health restored.";
             }
           }
           if (enemy.hp <= 0) {
@@ -1781,12 +1792,11 @@ function StreetFightPro3DCanvas() {
             enemy.contactTime += dt;
             if (enemy.contactTime > 0.62) {
               game.hp -= enemy.damage;
-              game.green = 0;
               player.position.addScaledVector(toPlayer.normalize(), 1.9);
               enemy.cooldown = enemy.kind === "boss" ? 0.75 : 1.05;
               enemy.contactTime = 0;
               enemy.attacking = 0.34;
-              game.message = `Enemy stayed close and hit! Green health emptied, plus ${enemy.damage} red damage.`;
+              game.message = `Enemy stayed close and hit! You lost ${enemy.damage} red health.`;
             }
           } else {
             enemy.contactTime = Math.max(0, enemy.contactTime - dt * 2.5);
@@ -1805,7 +1815,7 @@ function StreetFightPro3DCanvas() {
       renderer.render(scene, camera);
       const status = game.hp <= 0 ? "KNOCKED OUT • Press I to restart" : game.stage > 10 ? "COMPLETE" : game.message;
       if (hudRef.current) {
-        hudRef.current.textContent = `Street Fight Pro 3D • Stage ${Math.min(game.stage, 10)} / 10 • ${status} • WASD move • J punch • K jump • I special • L kick`;
+        hudRef.current.textContent = `Street Fight Pro 3D • Stage ${Math.min(game.stage, 10)} / 10 • ${status} • WASD move • J punch • K jump • I tornado kick (-green) • L kick`;
       }
       if (healthRef.current) {
         healthRef.current.innerHTML = `<div class="mb-2 flex items-center justify-between text-xs font-black uppercase tracking-[0.18em] text-white"><span>Red Health</span><span>${Math.max(0, Math.round(game.hp))}/120</span></div><div class="h-4 overflow-hidden rounded-full bg-red-950 ring-1 ring-white/15"><div class="h-full rounded-full bg-red-500" style="width:${Math.max(0, Math.min(100, (game.hp / 120) * 100))}%"></div></div><div class="mb-2 mt-3 flex items-center justify-between text-xs font-black uppercase tracking-[0.18em] text-white"><span>Green Combo Health</span><span>${Math.round(game.green)}/100</span></div><div class="h-4 overflow-hidden rounded-full bg-emerald-950 ring-1 ring-white/15"><div class="h-full rounded-full bg-emerald-400" style="width:${Math.max(0, Math.min(100, game.green))}%"></div></div>`;
