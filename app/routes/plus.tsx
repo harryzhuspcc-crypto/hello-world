@@ -471,7 +471,7 @@ function PlanePlus2DGame({ onMenu, on3d }: { onMenu: () => void; on3d?: () => vo
 
 type ThreeActor = {
   mesh: THREE.Object3D;
-  kind: "infantry" | "tank" | "boss" | "fighter" | "bomber";
+  kind: "infantry" | "tank" | "boss" | "fighter" | "bomber" | "thug" | "bruiser";
   hp: number;
   maxHp: number;
   cooldown: number;
@@ -562,6 +562,36 @@ function createSoldierMesh() {
   const rifle = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.9), new THREE.MeshBasicMaterial({ color: 0xffcf7a }));
   rifle.position.set(0.32, 0.9, -0.42);
   group.add(rifle);
+  return group;
+}
+
+function createStreetFighterMesh(kind: "player" | "thug" | "bruiser" | "boss") {
+  const group = new THREE.Group();
+  const scale = kind === "boss" ? 1.45 : kind === "bruiser" ? 1.2 : 1;
+  const bodyColor = kind === "player" ? 0x2563eb : kind === "boss" ? 0x7f1d1d : kind === "bruiser" ? 0x7c3aed : 0x475569;
+  const skin = new THREE.MeshStandardMaterial({ color: 0xf0b68a, roughness: 0.75 });
+  const cloth = new THREE.MeshStandardMaterial({ color: bodyColor, roughness: 0.82 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.9 });
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.9 * scale, 1.35 * scale, 0.42 * scale), cloth);
+  torso.position.y = 1.55 * scale;
+  group.add(torso);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.32 * scale, 16, 12), skin);
+  head.position.y = 2.48 * scale;
+  group.add(head);
+  for (const x of [-0.34, 0.34]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.25 * scale, 0.8 * scale, 0.28 * scale), dark);
+    leg.position.set(x * scale, 0.55 * scale, 0);
+    group.add(leg);
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.22 * scale, 0.88 * scale, 0.22 * scale), skin);
+    arm.position.set(x * 1.7 * scale, 1.62 * scale, -0.04);
+    arm.rotation.z = -x * 0.18;
+    group.add(arm);
+  }
+  if (kind === "boss") {
+    const crown = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.18, 0.46), new THREE.MeshBasicMaterial({ color: 0xfacc15 }));
+    crown.position.y = 3.78;
+    group.add(crown);
+  }
   return group;
 }
 
@@ -1203,7 +1233,7 @@ function createStreetEnemies(stage: number): StreetEnemy[] {
   return enemies;
 }
 
-function StreetFightProGame({ onMenu }: { onMenu: () => void }) {
+function StreetFightPro2DGame({ onMenu, on3d }: { onMenu: () => void; on3d?: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stateRef = useRef({
     stage: 1,
@@ -1478,7 +1508,269 @@ function StreetFightProGame({ onMenu }: { onMenu: () => void }) {
     ctx.fillText("WASD move • J punch (-green) • K jump • I special • L kick • Hit enemies to restore green", 42, h - 38);
   }, []);
 
-  return <PlusShell title="Street Fight Pro" subtitle="$3 Pro slot: stage-by-stage street fighting" onMenu={onMenu}><canvas ref={canvasRef} /></PlusShell>;
+  return <PlusShell title="Street Fight Pro 2D" subtitle="$3 Pro slot: classic flat street fighting" onMenu={onMenu} modeAction={on3d ? <button className="rounded-full border border-cyan-200/25 bg-cyan-300/15 px-4 py-2 text-sm font-bold uppercase tracking-[0.18em] text-cyan-100 shadow-2xl backdrop-blur transition hover:bg-cyan-300/25" onClick={on3d} type="button">3D Version</button> : undefined}><canvas ref={canvasRef} /></PlusShell>;
+}
+
+function StreetFightPro3DCanvas() {
+  const mountRef = useRef<HTMLDivElement | null>(null);
+  const hudRef = useRef<HTMLDivElement | null>(null);
+  const keysRef = useKeyTracker();
+
+  useEffect(() => {
+    const mount = mountRef.current;
+    if (!mount) return;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x17172d);
+    scene.fog = new THREE.Fog(0x17172d, 45, 180);
+    const camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerHeight, 0.1, 260);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    mount.appendChild(renderer.domElement);
+
+    scene.add(new THREE.HemisphereLight(0xbfd7ff, 0x2d160c, 1.05));
+    const streetLight = new THREE.DirectionalLight(0xffd79d, 1.75);
+    streetLight.position.set(14, 28, 18);
+    scene.add(streetLight);
+    const rim = new THREE.DirectionalLight(0x67e8f9, 0.8);
+    rim.position.set(-18, 16, -26);
+    scene.add(rim);
+
+    const road = new THREE.Mesh(new THREE.BoxGeometry(34, 0.18, 285), new THREE.MeshStandardMaterial({ color: 0x24272e, roughness: 0.95 }));
+    road.position.set(0, -0.04, -92);
+    scene.add(road);
+    const sidewalkMaterial = new THREE.MeshStandardMaterial({ color: 0x42464e, roughness: 0.92 });
+    for (const x of [-22, 22]) {
+      const sidewalk = new THREE.Mesh(new THREE.BoxGeometry(10, 0.24, 285), sidewalkMaterial);
+      sidewalk.position.set(x, 0.02, -92);
+      scene.add(sidewalk);
+    }
+    const lineMaterial = new THREE.MeshBasicMaterial({ color: 0xfacc15 });
+    for (let i = 0; i < 30; i += 1) {
+      const line = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.04, 4.2), lineMaterial);
+      line.position.set(0, 0.09, 38 - i * 9.5);
+      scene.add(line);
+    }
+    for (let i = 0; i < 22; i += 1) {
+      const side = i % 2 === 0 ? -1 : 1;
+      const height = THREE.MathUtils.randFloat(8, 20);
+      const building = new THREE.Mesh(new THREE.BoxGeometry(THREE.MathUtils.randFloat(7, 13), height, THREE.MathUtils.randFloat(8, 18)), new THREE.MeshStandardMaterial({ color: i % 3 === 0 ? 0x263147 : 0x30283c, roughness: 0.86 }));
+      building.position.set(side * THREE.MathUtils.randFloat(31, 43), height / 2, 36 - i * 13);
+      scene.add(building);
+      const sign = new THREE.Mesh(new THREE.BoxGeometry(3.8, 1.1, 0.16), new THREE.MeshBasicMaterial({ color: i % 2 === 0 ? 0x22c55e : 0xfacc15 }));
+      sign.position.set(building.position.x - side * 3.2, 3.7, building.position.z + 3.8);
+      scene.add(sign);
+    }
+
+    const player = createStreetFighterMesh("player");
+    player.position.set(0, 0, 34);
+    scene.add(player);
+
+    type Street3DEnemy = ThreeActor & { damage: number; hitStun: number };
+    const enemies: Street3DEnemy[] = [];
+    const game = {
+      stage: 1,
+      hp: 120,
+      green: 100,
+      cooldown: 0,
+      attackTimer: 0,
+      attackType: "none" as "none" | "punch" | "kick" | "special",
+      attackHit: false,
+      jump: 0,
+      jumpV: 0,
+      facing: 0,
+      prevJ: false,
+      prevK: false,
+      prevI: false,
+      prevL: false,
+      message: "3D Street Fight Pro: clear the block stage by stage.",
+    };
+
+    const clearEnemies = () => {
+      for (const enemy of enemies.splice(0)) {
+        scene.remove(enemy.mesh);
+        disposeObject(enemy.mesh);
+      }
+    };
+    const spawnStage = () => {
+      clearEnemies();
+      const count = 3 + game.stage;
+      for (let i = 0; i < count; i += 1) {
+        const isBoss = i === count - 1 && (game.stage % 3 === 0 || game.stage === 10);
+        const kind: "thug" | "bruiser" | "boss" = isBoss ? "boss" : i % 4 === 2 ? "bruiser" : "thug";
+        const mesh = createStreetFighterMesh(kind);
+        mesh.position.set(THREE.MathUtils.randFloatSpread(11), 0, -18 - i * 13);
+        scene.add(mesh);
+        const hp = kind === "boss" ? 130 + game.stage * 30 : kind === "bruiser" ? 52 + game.stage * 9 : 30 + game.stage * 6;
+        enemies.push({ mesh, kind, hp, maxHp: hp, cooldown: 0.6 + i * 0.2, speed: kind === "boss" ? 4.4 : kind === "bruiser" ? 5.5 : 6.7, damage: kind === "boss" ? 23 + game.stage * 2 : kind === "bruiser" ? 15 + game.stage : 9 + game.stage, hitStun: 0 });
+      }
+      player.position.set(0, 0, 34);
+      game.green = 100;
+      game.message = `3D Stage ${game.stage}: street gang ahead.`;
+    };
+    spawnStage();
+
+    const attackFlash = new THREE.Mesh(new THREE.SphereGeometry(1, 18, 12), new THREE.MeshBasicMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.0 }));
+    attackFlash.scale.set(1.8, 0.5, 1.8);
+    scene.add(attackFlash);
+
+    const clock = new THREE.Clock();
+    let frame = 0;
+    const resize = () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    };
+    window.addEventListener("resize", resize);
+
+    const tick = () => {
+      const dt = Math.min(clock.getDelta(), 0.033);
+      const keys = keysRef.current;
+      const jDown = keys.has("KeyJ");
+      const kDown = keys.has("KeyK");
+      const iDown = keys.has("KeyI");
+      const lDown = keys.has("KeyL");
+      const jPressed = jDown && !game.prevJ;
+      const kPressed = kDown && !game.prevK;
+      const iPressed = iDown && !game.prevI;
+      const lPressed = lDown && !game.prevL;
+      game.prevJ = jDown; game.prevK = kDown; game.prevI = iDown; game.prevL = lDown;
+
+      if (game.hp <= 0) {
+        if (iPressed) {
+          Object.assign(game, { stage: 1, hp: 120, green: 100, cooldown: 0, attackTimer: 0, message: "Restarted Street Fight Pro 3D." });
+          spawnStage();
+        }
+      } else if (game.stage <= 10) {
+        const moveX = (keys.has("KeyD") || keys.has("ArrowRight") ? 1 : 0) - (keys.has("KeyA") || keys.has("ArrowLeft") ? 1 : 0);
+        const moveZ = (keys.has("KeyS") || keys.has("ArrowDown") ? 1 : 0) - (keys.has("KeyW") || keys.has("ArrowUp") ? 1 : 0);
+        const move = new THREE.Vector3(moveX, 0, moveZ);
+        if (move.lengthSq() > 0) {
+          move.normalize();
+          player.position.addScaledVector(move, 9.6 * dt);
+          game.facing = Math.atan2(move.x, -move.z);
+        }
+        player.position.x = clamp(player.position.x, -13, 13);
+        player.position.z = clamp(player.position.z, -226, 38);
+        if (enemies.length > 0) player.position.z = Math.max(player.position.z, -165);
+        player.rotation.y = game.facing;
+
+        if (kPressed && game.jump <= 0) { game.jumpV = 7.5; game.message = "K jump: hop over close enemies."; }
+        if (game.jump > 0 || game.jumpV > 0) {
+          game.jump += game.jumpV * dt;
+          game.jumpV -= 18 * dt;
+          if (game.jump <= 0) { game.jump = 0; game.jumpV = 0; }
+        }
+        player.position.y = game.jump;
+        game.cooldown = Math.max(0, game.cooldown - dt);
+        game.attackTimer = Math.max(0, game.attackTimer - dt);
+        if (game.attackTimer <= 0) { game.attackType = "none"; game.attackHit = false; }
+        if (jPressed && game.cooldown <= 0) {
+          game.green = Math.max(0, game.green - 8);
+          Object.assign(game, { attackType: "punch" as const, attackTimer: 0.18, attackHit: false, cooldown: 0.24, message: "J punch costs green health. Hit enemies to restore it." });
+        } else if (lPressed && game.cooldown <= 0) {
+          Object.assign(game, { attackType: "kick" as const, attackTimer: 0.24, attackHit: false, cooldown: 0.38, message: "L kick has longer range." });
+        } else if (iPressed && game.cooldown <= 0 && game.green >= 25) {
+          game.green -= 25;
+          Object.assign(game, { attackType: "special" as const, attackTimer: 0.42, attackHit: false, cooldown: 0.82, message: "I special spends green health for a wide 3D blast." });
+        } else if (iPressed && game.green < 25) game.message = "Need 25 green health for special.";
+
+        const forward = new THREE.Vector3(Math.sin(game.facing), 0, -Math.cos(game.facing));
+        const attackRange = game.attackType === "special" ? 5.6 : game.attackType === "kick" ? 3.45 : 2.65;
+        const attackDamage = game.attackType === "special" ? 36 : game.attackType === "kick" ? 17 : 12;
+        if (game.attackType !== "none" && game.attackTimer > 0) {
+          attackFlash.position.copy(player.position).addScaledVector(forward, attackRange * 0.5).add(new THREE.Vector3(0, 1.2, 0));
+          attackFlash.scale.set(attackRange * 0.45, 0.55, game.attackType === "special" ? 2.3 : 0.75);
+          (attackFlash.material as THREE.MeshBasicMaterial).opacity = game.attackType === "special" ? 0.42 : 0.28;
+        } else (attackFlash.material as THREE.MeshBasicMaterial).opacity = 0;
+
+        for (let i = enemies.length - 1; i >= 0; i -= 1) {
+          const enemy = enemies[i];
+          enemy.cooldown = Math.max(0, enemy.cooldown - dt);
+          enemy.hitStun = Math.max(0, enemy.hitStun - dt);
+          const toPlayer = player.position.clone().sub(enemy.mesh.position); toPlayer.y = 0;
+          const dist = toPlayer.length() || 1;
+          enemy.mesh.lookAt(player.position.x, enemy.mesh.position.y, player.position.z);
+          if (enemy.hitStun <= 0 && dist > 2.0) enemy.mesh.position.addScaledVector(toPlayer.normalize(), enemy.speed * dt);
+          enemy.mesh.position.x = clamp(enemy.mesh.position.x, -13.5, 13.5);
+          if (game.attackType !== "none" && game.attackTimer > 0 && !game.attackHit) {
+            const toEnemy = enemy.mesh.position.clone().sub(player.position); toEnemy.y = 0;
+            const rangeOk = toEnemy.length() < attackRange + (enemy.kind === "boss" ? 1.2 : 0.4);
+            const angleOk = game.attackType === "special" || toEnemy.normalize().dot(forward) > 0.32;
+            if (rangeOk && angleOk) {
+              enemy.hp -= attackDamage;
+              enemy.hitStun = game.attackType === "special" ? 0.55 : 0.3;
+              enemy.mesh.position.addScaledVector(forward, game.attackType === "special" ? 2.2 : 1.1);
+              game.green = clamp(game.green + (game.attackType === "special" ? 24 : game.attackType === "kick" ? 15 : 13), 0, 100);
+              game.attackHit = true;
+              game.message = "3D hit confirmed! Green health restored.";
+            }
+          }
+          if (enemy.hp <= 0) {
+            scene.remove(enemy.mesh);
+            disposeObject(enemy.mesh);
+            enemies.splice(i, 1);
+            game.green = clamp(game.green + 18, 0, 100);
+            continue;
+          }
+          if (dist < (enemy.kind === "boss" ? 2.45 : 1.8) && enemy.cooldown <= 0 && game.jump < 0.35) {
+            game.hp -= enemy.damage;
+            game.green = 0;
+            player.position.addScaledVector(toPlayer.normalize(), 1.9);
+            enemy.cooldown = enemy.kind === "boss" ? 0.75 : 1.05;
+            game.message = `Enemy hit! Green health emptied, plus ${enemy.damage} red damage.`;
+          }
+        }
+        if (enemies.length === 0) {
+          game.stage += 1;
+          game.hp = Math.min(120, game.hp + 18);
+          if (game.stage <= 10) spawnStage();
+          else game.message = "Street Fight Pro 3D complete!";
+        }
+      }
+
+      camera.position.set(player.position.x, player.position.y + 6.2, player.position.z + 13.5);
+      camera.lookAt(player.position.x, player.position.y + 1.2, player.position.z - 8);
+      renderer.render(scene, camera);
+      if (hudRef.current) {
+        const status = game.hp <= 0 ? "KNOCKED OUT • Press I to restart" : game.stage > 10 ? "COMPLETE" : game.message;
+        hudRef.current.textContent = `Street Fight Pro 3D • Stage ${Math.min(game.stage, 10)} / 10 • Red HP ${Math.max(0, Math.round(game.hp))} • Green ${Math.round(game.green)} • ${status} • WASD move • J punch • K jump • I special • L kick`;
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("resize", resize);
+      clearEnemies();
+      scene.remove(attackFlash);
+      disposeObject(attackFlash);
+      renderer.dispose();
+      mount.removeChild(renderer.domElement);
+      disposeObject(scene);
+    };
+  }, [keysRef]);
+
+  return <><div ref={mountRef} className="h-full w-full" /><div ref={hudRef} className="absolute bottom-6 left-6 right-6 z-40 rounded-3xl border border-white/10 bg-black/55 px-5 py-4 text-sm font-bold text-white shadow-2xl backdrop-blur" /></>;
+}
+
+function StreetFightProGame({ onMenu }: { onMenu: () => void }) {
+  const [mode, setMode] = useState<"3d" | "2d">("3d");
+  if (mode === "2d") return <StreetFightPro2DGame onMenu={onMenu} on3d={() => setMode("3d")} />;
+  return (
+    <PlusShell
+      title="Street Fight Pro 3D"
+      subtitle="$3 Pro slot: 10-stage 3D street fighting + 2D version available"
+      onMenu={onMenu}
+      modeAction={<button className="rounded-full border border-amber-200/25 bg-amber-300/15 px-4 py-2 text-sm font-bold uppercase tracking-[0.18em] text-amber-100 shadow-2xl backdrop-blur transition hover:bg-amber-300/25" onClick={() => setMode("2d")} type="button">2D Version</button>}
+    >
+      <StreetFightPro3DCanvas />
+    </PlusShell>
+  );
 }
 
 function PlusPlanScreen({ continueToPlus }: { continueToPlus: () => void }) {
@@ -1528,7 +1820,7 @@ function PlusPlanScreen({ continueToPlus }: { continueToPlus: () => void }) {
               <li><strong className="text-amber-200">Tank Plus:</strong> run-through 3D tank stages with ambushes and boss tanks.</li>
               <li><strong className="text-cyan-200">Plane Plus:</strong> stage-based sky missions with boss planes.</li>
               <li><strong className="text-orange-200">Mario Plus:</strong> harder 2D stages, reachable coins, lucky blocks, and fireballs.</li>
-              <li><strong className="text-emerald-200">Street Fight Pro:</strong> stage-by-stage street fights with punch, kick, jump, and special moves.</li>
+              <li><strong className="text-emerald-200">Street Fight Pro:</strong> 3D stage-by-stage street fights with punch, kick, jump, and special moves.</li>
             </ul>
             <p className="mt-4 rounded-2xl border border-cyan-200/15 bg-cyan-300/10 p-3 text-sm font-bold text-cyan-100">
               For now this is just a decorative choice screen: Free Trial, $3, and $9 all open the same Plus games.
@@ -1569,7 +1861,7 @@ function PlusPlanScreen({ continueToPlus }: { continueToPlus: () => void }) {
               </p>
               {index === 1 && (
                 <div className="mt-3 rounded-2xl border border-emerald-200/25 bg-emerald-300/10 p-3 text-sm font-bold text-emerald-100">
-                  New under the $3 Pro slot: Street Fight Pro — WASD move, J punch, K jump, I special, L kick.
+                  New under the $3 Pro slot: Street Fight Pro 3D — WASD move, J punch, K jump, I special, L kick.
                 </div>
               )}
               <span className="mt-6 inline-block rounded-full bg-white px-5 py-3 text-xs font-black uppercase tracking-[0.18em] text-slate-950">
@@ -1588,7 +1880,7 @@ function PlusMenu({ setGame }: { setGame: (game: PlusGame) => void }) {
     { id: "tank" as const, title: "Tank Plus Campaign", desc: "12 street stages. Roll forward, stop at ambushes, clear infantry and tanks, then defeat a boss tank at each stage end.", accent: "from-lime-300 to-emerald-500" },
     { id: "plane" as const, title: "Plane Plus Campaign", desc: "12 sky sorties with no infantry: fighters and bombers rush your lane, then a boss plane guards every stage finish.", accent: "from-cyan-300 to-blue-500" },
     { id: "mario" as const, title: "Mario Plus Worlds", desc: "12 harder obby stages with reachable coins, reachable lucky blocks, fire flowers, and fireballs.", accent: "from-amber-300 to-orange-500" },
-    { id: "street" as const, title: "Street Fight Pro", desc: "$3 Pro-slot game. Fight stage by stage through city streets with WASD movement, J punch, K jump, I special, and L kick.", accent: "from-emerald-300 to-green-600" },
+    { id: "street" as const, title: "Street Fight Pro 3D", desc: "$3 Pro-slot game. Fight stage by stage through 3D city streets with WASD movement, J punch, K jump, I special, and L kick. 2D version included.", accent: "from-emerald-300 to-green-600" },
   ];
 
   return (
