@@ -5,6 +5,7 @@ import * as THREE from "three";
 import type { Route } from "./+types/plus";
 
 type PlusGame = "plans" | "menu" | "tank" | "plane" | "mario" | "street";
+type PlusAccess = "trial" | "three" | "nine";
 
 type Keys = Set<string>;
 
@@ -1852,7 +1853,7 @@ function StreetFightProGame({ onMenu }: { onMenu: () => void }) {
   );
 }
 
-function PlusPlanScreen({ continueToPlus }: { continueToPlus: () => void }) {
+function PlusPlanScreen({ continueToPlus }: { continueToPlus: (access: PlusAccess) => void }) {
   const [selectedPlan, setSelectedPlan] = useState<"trial" | "three" | "nine" | null>(null);
   const [planPassword, setPlanPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
@@ -1888,12 +1889,12 @@ function PlusPlanScreen({ continueToPlus }: { continueToPlus: () => void }) {
     event.preventDefault();
     if (!selectedPlan) return;
     if (selectedPlan === "trial") {
-      continueToPlus();
+      continueToPlus("trial");
       return;
     }
     const expected = selectedPlan === "three" ? "0987" : "1357";
     if (planPassword === expected) {
-      continueToPlus();
+      continueToPlus(selectedPlan);
       return;
     }
     setPasswordError("Wrong password");
@@ -1925,7 +1926,7 @@ function PlusPlanScreen({ continueToPlus }: { continueToPlus: () => void }) {
               <li><strong className="text-emerald-200">Street Fight Pro:</strong> 3D stage-by-stage street fights with punch, kick, jump, and special moves.</li>
             </ul>
             <p className="mt-4 rounded-2xl border border-cyan-200/15 bg-cyan-300/10 p-3 text-sm font-bold text-cyan-100">
-              For now this is just a decorative choice screen: Free Trial, $3, and $9 all open the same Plus games.
+              Free Trial opens the Plus games except Street Fight Pro. The $3 and $9 passwords unlock Street Fight Pro too.
             </p>
           </div>
         </div>
@@ -1963,7 +1964,7 @@ function PlusPlanScreen({ continueToPlus }: { continueToPlus: () => void }) {
               </div>
               <p className="mt-4 text-sm leading-6 text-slate-300">{plan.detail}</p>
               <p className="mt-3 rounded-2xl border border-cyan-200/15 bg-cyan-300/10 p-3 text-sm font-bold text-cyan-100">
-                All plans currently do the same thing and open the same Plus menu.
+                Free Trial excludes Street Fight Pro. $3 and $9 unlock every mode.
               </p>
               {index === 1 && (
                 <div className="mt-3 rounded-2xl border border-emerald-200/25 bg-emerald-300/10 p-3 text-sm font-bold text-emerald-100">
@@ -2011,7 +2012,7 @@ function PlusPlanScreen({ continueToPlus }: { continueToPlus: () => void }) {
   );
 }
 
-function PlusMenu({ setGame }: { setGame: (game: PlusGame) => void }) {
+function PlusMenu({ setGame, access }: { setGame: (game: PlusGame) => void; access: PlusAccess }) {
   const cards = [
     { id: "tank" as const, title: "Tank Plus Campaign", desc: "12 street stages. Roll forward, stop at ambushes, clear infantry and tanks, then defeat a boss tank at each stage end.", accent: "from-lime-300 to-emerald-500" },
     { id: "plane" as const, title: "Plane Plus Campaign", desc: "12 sky sorties with no infantry: fighters and bombers rush your lane, then a boss plane guards every stage finish.", accent: "from-cyan-300 to-blue-500" },
@@ -2025,22 +2026,44 @@ function PlusMenu({ setGame }: { setGame: (game: PlusGame) => void }) {
       <section className="relative mx-auto flex min-h-[calc(100vh-4rem)] max-w-6xl flex-col justify-center">
         <nav className="mb-12 flex items-center justify-between rounded-full border border-amber-200/20 bg-white/5 px-5 py-3 shadow-2xl shadow-black/20 backdrop-blur">
           <Link className="text-sm font-bold uppercase tracking-[0.24em] text-white/80 hover:text-white" to="/">← Back to Lobby</Link>
-          <span className="rounded-full bg-amber-300 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-slate-950">GET PLUS</span>
+          <div className="flex items-center gap-3">
+            <button className="text-xs font-black uppercase tracking-[0.18em] text-white/70 hover:text-white" onClick={() => setGame("plans")} type="button">Change Plan</button>
+            <span className="rounded-full bg-amber-300 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-slate-950">GET PLUS</span>
+          </div>
         </nav>
         <div className="max-w-4xl">
           <p className="text-sm font-black uppercase tracking-[0.35em] text-amber-200">Plus Arcade Expansion</p>
           <h1 className="mt-4 text-6xl font-black tracking-tight sm:text-7xl">Stage-by-stage campaigns</h1>
           <p className="mt-6 text-xl leading-8 text-slate-300">Pick a Plus mode. These are campaign versions built around stage progression, boss endings, and new power mechanics.</p>
+          {access === "trial" && (
+            <p className="mt-4 rounded-2xl border border-amber-200/25 bg-amber-300/10 p-4 text-sm font-bold text-amber-100">
+              Free Trial active: Street Fight Pro is locked. Use the $3 password 0987 or $9 password 1357 to unlock it.
+            </p>
+          )}
         </div>
         <div className="mt-12 grid gap-5 lg:grid-cols-4">
-          {cards.map((card) => (
-            <button key={card.id} className="group rounded-[1.75rem] border border-white/10 bg-white/[0.07] p-6 text-left shadow-xl shadow-black/20 backdrop-blur transition hover:-translate-y-2 hover:border-white/25 hover:bg-white/[0.11]" onClick={() => setGame(card.id)} type="button">
-              <div className={`mb-6 h-16 w-16 rounded-2xl bg-gradient-to-br ${card.accent} shadow-lg transition group-hover:rotate-3 group-hover:scale-105`} />
-              <h2 className="text-2xl font-bold">{card.title}</h2>
-              <p className="mt-3 text-sm leading-6 text-slate-300">{card.desc}</p>
-              <span className="mt-6 inline-block rounded-full bg-white px-5 py-3 text-xs font-black uppercase tracking-[0.18em] text-slate-950">Play Plus</span>
-            </button>
-          ))}
+          {cards.map((card) => {
+            const locked = card.id === "street" && access === "trial";
+            return (
+              <button
+                key={card.id}
+                className={`group rounded-[1.75rem] border p-6 text-left shadow-xl shadow-black/20 backdrop-blur transition ${
+                  locked
+                    ? "cursor-not-allowed border-red-200/20 bg-red-950/25 opacity-70"
+                    : "border-white/10 bg-white/[0.07] hover:-translate-y-2 hover:border-white/25 hover:bg-white/[0.11]"
+                }`}
+                disabled={locked}
+                onClick={() => setGame(card.id)}
+                type="button"
+              >
+                <div className={`mb-6 h-16 w-16 rounded-2xl bg-gradient-to-br ${card.accent} shadow-lg transition group-hover:rotate-3 group-hover:scale-105`} />
+                <h2 className="text-2xl font-bold">{card.title}</h2>
+                <p className="mt-3 text-sm leading-6 text-slate-300">{card.desc}</p>
+                {locked && <p className="mt-4 rounded-2xl border border-red-200/20 bg-red-500/10 p-3 text-sm font-black text-red-100">Locked in Free Trial — choose $3 or $9 first.</p>}
+                <span className="mt-6 inline-block rounded-full bg-white px-5 py-3 text-xs font-black uppercase tracking-[0.18em] text-slate-950">{locked ? "Locked" : "Play Plus"}</span>
+              </button>
+            );
+          })}
         </div>
       </section>
     </main>
@@ -2049,10 +2072,18 @@ function PlusMenu({ setGame }: { setGame: (game: PlusGame) => void }) {
 
 export default function Plus() {
   const [game, setGame] = useState<PlusGame>("plans");
+  const [access, setAccess] = useState<PlusAccess>("trial");
+  const unlockPlan = (nextAccess: PlusAccess) => {
+    setAccess(nextAccess);
+    setGame("menu");
+  };
   if (game === "tank") return <TankPlusGame onMenu={() => setGame("menu")} />;
   if (game === "plane") return <PlanePlusGame onMenu={() => setGame("menu")} />;
   if (game === "mario") return <MarioPlusGame onMenu={() => setGame("menu")} />;
-  if (game === "street") return <StreetFightProGame onMenu={() => setGame("menu")} />;
-  if (game === "menu") return <PlusMenu setGame={setGame} />;
-  return <PlusPlanScreen continueToPlus={() => setGame("menu")} />;
+  if (game === "street") {
+    if (access === "trial") return <PlusMenu setGame={setGame} access={access} />;
+    return <StreetFightProGame onMenu={() => setGame("menu")} />;
+  }
+  if (game === "menu") return <PlusMenu setGame={setGame} access={access} />;
+  return <PlusPlanScreen continueToPlus={unlockPlan} />;
 }
