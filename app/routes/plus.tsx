@@ -1649,28 +1649,134 @@ function StreetFightPro3DCanvas() {
       clearEnvironment();
       const def = stageDefs[stage - 1] ?? stageDefs[0];
       scene.background = new THREE.Color(def.sky);
-      scene.fog = new THREE.Fog(def.fog, 42, 140);
+      scene.fog = new THREE.Fog(def.fog, 42, 145);
       accentLight.color.setHex(def.prop);
-      const groundMat = new THREE.MeshStandardMaterial({ color: def.ground, roughness: 0.92 });
-      envMesh(new THREE.BoxGeometry(31, 0.22, stageLength), groundMat, 0, -0.11, (stageStartZ + stageEndZ) / 2);
-      const sideMat = new THREE.MeshStandardMaterial({ color: def.side, roughness: 0.88 });
-      envMesh(new THREE.BoxGeometry(4, 0.3, stageLength), sideMat, -17.4, 0, (stageStartZ + stageEndZ) / 2);
-      envMesh(new THREE.BoxGeometry(4, 0.3, stageLength), sideMat, 17.4, 0, (stageStartZ + stageEndZ) / 2);
-      const lineMat = new THREE.MeshBasicMaterial({ color: def.detail === "plane" ? 0x0f172a : 0xfacc15 });
-      for (let z = stageStartZ - 6; z > stageEndZ; z -= 7) envMesh(new THREE.BoxGeometry(0.35, 0.04, 2.2), lineMat, 0, 0.05, z);
-      const propMat = new THREE.MeshStandardMaterial({ color: def.prop, roughness: 0.72, emissive: def.detail === "concert" || def.detail === "final" ? def.prop : 0x000000, emissiveIntensity: def.detail === "concert" ? 0.5 : def.detail === "final" ? 0.32 : 0 });
-      for (let i = 0; i < 16; i += 1) {
-        const side = i % 2 === 0 ? -1 : 1;
-        const z = stageStartZ - 10 - i * 6.2;
-        const h = def.detail === "plane" ? 3.0 : def.detail === "volcano" ? THREE.MathUtils.randFloat(5, 10) : THREE.MathUtils.randFloat(6, 18);
-        const width = def.detail === "ship" || def.detail === "plane" ? 3.5 : THREE.MathUtils.randFloat(4.5, 8.5);
-        const block = envMesh(new THREE.BoxGeometry(width, h, THREE.MathUtils.randFloat(3.5, 7.0)), i % 3 === 0 ? propMat : sideMat, side * THREE.MathUtils.randFloat(22, 29), h / 2, z);
-        if (def.detail === "chinatown" && i % 3 === 0) envMesh(new THREE.BoxGeometry(4.4, 0.28, 1.1), new THREE.MeshBasicMaterial({ color: 0xfacc15 }), block.position.x - side * 1.3, h + 0.2, z);
-        if (def.detail === "concert" && i % 2 === 0) envMesh(new THREE.BoxGeometry(2.5, 5.0, 0.35), new THREE.MeshBasicMaterial({ color: i % 4 === 0 ? 0x22d3ee : 0xd946ef }), side * 13.2, 2.5, z);
+      const centerZ = (stageStartZ + stageEndZ) / 2;
+      const standard = (color: number, roughness = 0.82, emissive = 0x000000, emissiveIntensity = 0) => new THREE.MeshStandardMaterial({ color, roughness, emissive, emissiveIntensity });
+      const basic = (color: number, opacity = 1) => new THREE.MeshBasicMaterial({ color, transparent: opacity < 1, opacity });
+      const box = (w: number, h: number, d: number, color: number, x: number, y: number, z: number, emissive = 0x000000, intensity = 0) => envMesh(new THREE.BoxGeometry(w, h, d), standard(color, 0.82, emissive, intensity), x, y, z);
+      const glowBox = (w: number, h: number, d: number, color: number, x: number, y: number, z: number, opacity = 1) => envMesh(new THREE.BoxGeometry(w, h, d), basic(color, opacity), x, y, z);
+      const cyl = (radius: number, height: number, color: number, x: number, y: number, z: number) => envMesh(new THREE.CylinderGeometry(radius, radius, height, 16), standard(color, 0.75), x, y, z);
+      box(31, 0.22, stageLength, def.ground, 0, -0.11, centerZ);
+      box(4, 0.3, stageLength, def.side, -17.4, 0, centerZ);
+      box(4, 0.3, stageLength, def.side, 17.4, 0, centerZ);
+      for (let z = stageStartZ - 6; z > stageEndZ; z -= 7) glowBox(0.35, 0.04, 2.2, def.detail === "plane" ? 0x0f172a : 0xfacc15, 0, 0.05, z);
+
+      if (def.detail === "city" || def.detail === "hardStreet") {
+        for (let i = 0; i < 18; i += 1) {
+          const side = i % 2 === 0 ? -1 : 1;
+          const z = stageStartZ - 7 - i * 5.7;
+          const h = THREE.MathUtils.randFloat(8, def.detail === "hardStreet" ? 24 : 17);
+          box(THREE.MathUtils.randFloat(5.5, 9.5), h, THREE.MathUtils.randFloat(4.5, 7), i % 3 === 0 ? def.prop : 0x263147, side * THREE.MathUtils.randFloat(22, 29), h / 2, z, def.detail === "hardStreet" && i % 4 === 0 ? 0xef4444 : 0x000000, def.detail === "hardStreet" && i % 4 === 0 ? 0.25 : 0);
+          if (i % 3 === 0) glowBox(3.8, 0.85, 0.16, i % 2 === 0 ? 0x22d3ee : 0xfacc15, side * 13.8, 3.4, z);
+          if (def.detail === "hardStreet" && i % 4 === 0) glowBox(1.8, 0.12, 2.2, 0xfb923c, side * THREE.MathUtils.randFloat(8, 12), 0.08, z + 1.4, 0.9);
+        }
+        for (let z = stageStartZ - 16; z > stageEndZ + 4; z -= 20) {
+          box(3.8, 1.1, 0.55, 0xf59e0b, -6.8, 0.55, z);
+          box(3.8, 1.1, 0.55, 0xf59e0b, 6.8, 0.55, z - 6);
+        }
+      } else if (def.detail === "police") {
+        box(26, 5.5, stageLength, 0x111827, 0, 2.75, centerZ);
+        box(20, 0.32, stageLength + 2, 0x334155, 0, 0.08, centerZ);
+        for (const side of [-1, 1]) {
+          box(5.2, 4.2, stageLength, 0x1e293b, side * 11.8, 2.1, centerZ);
+          for (let z = stageStartZ - 8; z > stageEndZ + 4; z -= 12) {
+            box(0.18, 3.7, 0.18, 0x94a3b8, side * 8.9, 2.1, z);
+            box(0.18, 3.7, 0.18, 0x94a3b8, side * 8.9, 2.1, z + 1.25);
+            box(0.18, 3.7, 0.18, 0x94a3b8, side * 8.9, 2.1, z - 1.25);
+            box(0.18, 0.18, 3.2, 0xcbd5e1, side * 8.9, 3.7, z);
+          }
+        }
+        for (let z = stageStartZ - 12; z > stageEndZ + 8; z -= 18) {
+          glowBox(1.2, 0.22, 1.2, 0xef4444, -3.5, 3.15, z);
+          glowBox(1.2, 0.22, 1.2, 0x3b82f6, 3.5, 3.15, z);
+          box(4.5, 0.9, 2.0, 0x0f172a, 0, 1.0, z);
+        }
+        box(13, 5.3, 0.7, 0x1d4ed8, 0, 2.65, stageEndZ - 3);
+        glowBox(7.0, 1.0, 0.18, 0x60a5fa, 0, 4.35, stageEndZ - 2.55);
+      } else if (def.detail === "ship") {
+        for (let z = stageStartZ - 4; z > stageEndZ; z -= 4) box(26, 0.04, 0.08, 0x8b5a2b, 0, 0.04, z);
+        for (const x of [-14.2, 14.2]) {
+          box(0.25, 1.3, stageLength, 0x7c4a21, x, 0.75, centerZ);
+          for (let z = stageStartZ - 4; z > stageEndZ; z -= 8) box(0.5, 2.0, 0.5, 0x4b2e18, x, 1.0, z);
+        }
+        for (let z = stageStartZ - 14; z > stageEndZ + 8; z -= 19) {
+          box(2.8, 1.8, 2.8, 0x92400e, -8, 0.9, z);
+          box(2.2, 1.4, 2.2, 0xb45309, 7, 0.7, z - 5);
+          const mast = cyl(0.28, 8, 0x7c2d12, 0, 4, z - 2); mast.rotation.z = 0.04;
+          glowBox(5.0, 2.5, 0.16, 0xffffff, 0.9, 5.4, z - 2, 0.72);
+        }
+      } else if (def.detail === "warehouse") {
+        for (let z = stageStartZ - 8; z > stageEndZ + 6; z -= 10) {
+          box(4.4, 2.4, 4.4, 0x92400e, -10, 1.2, z);
+          box(3.5, 1.9, 3.5, 0x7c2d12, 9, 0.95, z - 5);
+          box(1.2, 3.2, 1.2, 0x475569, -3, 1.6, z + 1);
+          glowBox(6.5, 0.16, 0.16, 0xfacc15, 0, 4.0, z);
+        }
+      } else if (def.detail === "volcano") {
+        for (let z = stageStartZ - 10; z > stageEndZ + 5; z -= 12) {
+          glowBox(4.2, 0.08, 7.5, 0xfb923c, z % 24 === 0 ? -5 : 5, 0.08, z, 0.95);
+          glowBox(2.4, 0.09, 4.5, 0xfacc15, z % 24 === 0 ? -5 : 5, 0.11, z, 0.8);
+          const cone = envMesh(new THREE.ConeGeometry(THREE.MathUtils.randFloat(1.2, 2.4), THREE.MathUtils.randFloat(2.2, 4.5), 7), standard(0x431407, 0.92), THREE.MathUtils.randFloat(-14, 14), 1.4, z - 4);
+          cone.rotation.y = Math.random() * Math.PI;
+        }
+        for (const x of [-17.5, 17.5]) for (let z = stageStartZ - 16; z > stageEndZ; z -= 18) glowBox(2.2, 2.8, 2.2, 0xef4444, x, 1.4, z, 0.65);
+      } else if (def.detail === "sewer") {
+        glowBox(9.5, 0.08, stageLength, 0x84cc16, 0, 0.07, centerZ, 0.35);
+        for (const x of [-13.8, 13.8]) {
+          const pipe = cyl(1.1, stageLength, 0x334155, x, 2.2, centerZ); pipe.rotation.x = Math.PI / 2;
+          for (let z = stageStartZ - 9; z > stageEndZ + 5; z -= 13) glowBox(1.7, 1.7, 0.15, 0x84cc16, x > 0 ? 12.7 : -12.7, 2.2, z, 0.55);
+        }
+        for (let z = stageStartZ - 12; z > stageEndZ + 8; z -= 18) {
+          const grate = glowBox(6, 0.08, 2.4, 0x0f172a, 0, 0.12, z);
+          for (let x = -2.4; x <= 2.4; x += 0.8) box(0.08, 0.12, 2.4, 0x64748b, x, 0.2, z);
+          grate.visible = true;
+        }
+      } else if (def.detail === "chinatown") {
+        for (let z = stageStartZ - 8; z > stageEndZ + 4; z -= 9) {
+          for (const x of [-12.5, 12.5]) {
+            box(0.35, 4.5, 0.35, 0x7f1d1d, x, 2.25, z);
+            glowBox(2.9, 0.35, 1.2, 0xfacc15, x, 4.7, z);
+            glowBox(1.0, 1.0, 1.0, 0xef4444, x, 3.1, z + 2.0, 0.75);
+          }
+          glowBox(19, 0.18, 0.18, 0xfacc15, 0, 5.0, z);
+        }
+      } else if (def.detail === "rooftop") {
+        for (let z = stageStartZ - 8; z > stageEndZ; z -= 8) {
+          box(1.0, 1.1, 1.0, 0x94a3b8, -13.6, 0.75, z);
+          box(1.0, 1.1, 1.0, 0x94a3b8, 13.6, 0.75, z);
+          if (z % 16 === 0) box(3.4, 1.1, 2.5, 0x475569, THREE.MathUtils.randFloat(-9, 9), 0.65, z);
+          const vent = cyl(0.65, 1.2, 0x64748b, THREE.MathUtils.randFloat(-10, 10), 0.6, z - 3); vent.rotation.z = Math.PI / 2;
+        }
+      } else if (def.detail === "concert") {
+        box(24, 2.2, 8, 0x111827, 0, 1.1, stageEndZ + 4, 0xd946ef, 0.2);
+        glowBox(18, 0.2, 0.2, 0xd946ef, 0, 4.8, stageEndZ + 8);
+        for (const x of [-10, -5, 5, 10]) {
+          box(2.2, 4.0, 2.2, 0x020617, x, 2.0, stageEndZ + 9);
+          glowBox(1.4, 1.4, 0.12, x < 0 ? 0x22d3ee : 0xf472b6, x, 5.2, stageEndZ + 10, 0.85);
+        }
+        for (let z = stageStartZ - 10; z > stageEndZ + 16; z -= 12) for (const x of [-11, 11]) glowBox(2.8, 5.5, 0.25, z % 24 === 0 ? 0x22d3ee : 0xd946ef, x, 2.8, z, 0.5);
+      } else if (def.detail === "plane") {
+        box(30, 6.5, stageLength, 0xe2e8f0, 0, 3.0, centerZ);
+        box(22, 0.34, stageLength, 0xb7c6d8, 0, 0.04, centerZ);
+        for (const x of [-13.8, 13.8]) for (let z = stageStartZ - 7; z > stageEndZ + 5; z -= 9) glowBox(2.0, 1.05, 0.12, 0x7dd3fc, x, 3.6, z, 0.75);
+        for (let z = stageStartZ - 12; z > stageEndZ + 10; z -= 8) {
+          box(1.6, 1.5, 1.7, 0x1e3a8a, -5.5, 0.8, z);
+          box(1.6, 1.5, 1.7, 0x1e3a8a, 5.5, 0.8, z);
+          glowBox(0.14, 0.06, 6.0, 0x334155, 0, 0.18, z);
+        }
+      } else if (def.detail === "final") {
+        const ring = envMesh(new THREE.TorusGeometry(10, 0.28, 8, 56), basic(0xfacc15), 0, 0.2, stageEndZ + 8); ring.rotation.x = Math.PI / 2;
+        glowBox(25, 0.08, 25, 0x7f1d1d, 0, 0.06, stageEndZ + 8, 0.3);
+        for (let i = 0; i < 12; i += 1) {
+          const angle = (i / 12) * Math.PI * 2;
+          const x = Math.sin(angle) * 12;
+          const z = stageEndZ + 8 + Math.cos(angle) * 12;
+          box(1.1, 4.8, 1.1, 0x111827, x, 2.4, z);
+          glowBox(1.5, 1.2, 1.5, i % 2 === 0 ? 0xfacc15 : 0xef4444, x, 5.2, z, 0.8);
+        }
+        box(11, 5, 0.6, 0x450a0a, 0, 2.5, stageEndZ - 4, 0xef4444, 0.22);
       }
-      if (def.detail === "volcano") for (let z = stageStartZ - 20; z > stageEndZ + 8; z -= 22) envMesh(new THREE.BoxGeometry(10, 0.06, 2.4), new THREE.MeshBasicMaterial({ color: 0xfb923c }), THREE.MathUtils.randFloat(-8, 8), 0.08, z);
-      if (def.detail === "police") envMesh(new THREE.BoxGeometry(10, 5, 0.6), new THREE.MeshStandardMaterial({ color: 0x1d4ed8, roughness: 0.78 }), 0, 2.5, stageEndZ - 3);
-      if (def.detail === "final") envMesh(new THREE.TorusGeometry(10, 0.28, 8, 48), new THREE.MeshBasicMaterial({ color: 0xfacc15 }), 0, 0.2, stageEndZ + 8).rotation.x = Math.PI / 2;
     };
 
     const player = createStreetFighterMesh("player");
