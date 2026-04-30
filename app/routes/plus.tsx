@@ -1833,7 +1833,7 @@ function StreetFightPro3DCanvas() {
     player.position.set(0, 0, 7);
     scene.add(player);
 
-    type Street3DEnemy = ThreeActor & { damage: number; hitStun: number; contactTime: number; attacking: number; healthBar: THREE.Group; healthFill: THREE.Mesh };
+    type Street3DEnemy = ThreeActor & { damage: number; hitStun: number; contactTime: number; attacking: number; healthBar: THREE.Group; healthFill: THREE.Mesh; flankAngle: number; orbitRadius: number; aggression: number; activated: boolean };
     type HealthBin = { mesh: THREE.Group; hp: number; broken: boolean; used: boolean; pad: THREE.Mesh };
     const enemies: Street3DEnemy[] = [];
     const bins: HealthBin[] = [];
@@ -1898,7 +1898,7 @@ function StreetFightPro3DCanvas() {
         const z = isFinalBoss ? stageEndZ + 8 : stageStartZ - 14 - routeT * 70 + THREE.MathUtils.randFloat(-3, 3);
         mesh.position.set(THREE.MathUtils.randFloat(-9.5, 9.5), 0, z);
         scene.add(mesh);
-        const hp = isFinalBoss ? 720 : kind === "boss" ? 170 + game.stage * 34 : kind === "bruiser" ? 56 + game.stage * 10 : 34 + game.stage * 6;
+        const hp = isFinalBoss ? 920 : kind === "boss" ? 230 + game.stage * 42 : kind === "bruiser" ? 78 + game.stage * 14 : 48 + game.stage * 9;
         const healthBar = new THREE.Group();
         const barWidth = isFinalBoss ? 4.2 : kind === "boss" ? 2.9 : 1.9;
         const healthBack = new THREE.Mesh(new THREE.BoxGeometry(barWidth, 0.12, 0.08), new THREE.MeshBasicMaterial({ color: 0x7f1d1d }));
@@ -1906,7 +1906,11 @@ function StreetFightPro3DCanvas() {
         healthFill.position.x = 0;
         healthBar.add(healthBack, healthFill);
         scene.add(healthBar);
-        enemies.push({ mesh, kind, hp, maxHp: hp, cooldown: 0.6 + i * 0.16, speed: isFinalBoss ? 4.2 : kind === "boss" ? 4.7 : kind === "bruiser" ? 5.8 : 7.0, damage: isFinalBoss ? 36 : kind === "boss" ? 23 + game.stage * 2 : kind === "bruiser" ? 15 + game.stage : 9 + game.stage, hitStun: 0, contactTime: 0, attacking: 0, healthBar, healthFill });
+        const flankPattern = [-0.9, 0.9, -2.2, 2.2, 0, Math.PI];
+        const flankAngle = flankPattern[i % flankPattern.length] + THREE.MathUtils.randFloat(-0.18, 0.18);
+        const orbitRadius = isFinalBoss ? 3.2 : kind === "boss" ? 3.4 : kind === "bruiser" ? 2.9 : 2.55;
+        const stageBoost = 1 + game.stage * 0.045;
+        enemies.push({ mesh, kind, hp, maxHp: hp, cooldown: 0.45 + i * 0.09, speed: (isFinalBoss ? 5.2 : kind === "boss" ? 5.5 : kind === "bruiser" ? 7.0 : 8.4) * stageBoost, damage: isFinalBoss ? 44 : kind === "boss" ? 29 + game.stage * 2.6 : kind === "bruiser" ? 20 + game.stage * 1.4 : 13 + game.stage * 1.15, hitStun: 0, contactTime: 0, attacking: 0, healthBar, healthFill, flankAngle, orbitRadius, aggression: THREE.MathUtils.randFloat(0.85, 1.25), activated: false });
       }
       const binCount = game.stage === TOTAL_STAGES ? 1 : 2 + (game.stage % 3 === 0 ? 1 : 0);
       for (let i = 0; i < binCount; i += 1) createHealthBin(THREE.MathUtils.randFloat(-8.8, 8.8), stageStartZ - 28 - i * 24 + THREE.MathUtils.randFloat(-3, 3));
@@ -1990,7 +1994,7 @@ function StreetFightPro3DCanvas() {
 
         const forward = new THREE.Vector3(Math.sin(game.facing), 0, -Math.cos(game.facing));
         const attackRange = autoPunchRange;
-        const attackDamage = 10 + Math.min(game.stage, TOTAL_STAGES) * 0.8;
+        const attackDamage = 9 + Math.min(game.stage, TOTAL_STAGES) * 0.65;
         animateStreetFighterMesh(player, dt, { moving: isMoving, jumping: game.jump > 0.05, attack: game.attackType, attacking: game.attackType !== "none" && game.attackTimer > 0 });
 
         for (const bin of bins) {
@@ -2025,9 +2029,36 @@ function StreetFightPro3DCanvas() {
           enemy.attacking = Math.max(0, enemy.attacking - dt);
           const toPlayer = player.position.clone().sub(enemy.mesh.position); toPlayer.y = 0;
           const dist = toPlayer.length() || 1;
+          const zGapAhead = player.position.z - enemy.mesh.position.z;
+          if (!enemy.activated && (zGapAhead > -8 || dist < 28 || enemy.kind === "boss")) {
+            enemy.activated = true;
+            game.message = enemy.kind === "boss" ? "Boss is charging! Keep moving and use space." : "Ambush! Enemies are spreading out to surround you.";
+          }
           enemy.mesh.lookAt(player.position.x, enemy.mesh.position.y, player.position.z);
-          const enemyMoving = enemy.hitStun <= 0 && dist > 2.0;
-          if (enemyMoving) enemy.mesh.position.addScaledVector(toPlayer.normalize(), enemy.speed * dt);
+          let enemyMoving = false;
+          if (enemy.activated && enemy.hitStun <= 0) {
+            const side = new THREE.Vector3(Math.cos(enemy.flankAngle), 0, Math.sin(enemy.flankAngle));
+            const forwardAmbush = new THREE.Vector3(0, 0, -1.8 - (enemy.aggression * 0.7));
+            const targetPos = player.position.clone().addScaledVector(side, enemy.orbitRadius).add(forwardAmbush);
+            if (enemy.kind === "boss") targetPos.copy(player.position);
+            targetPos.x = clamp(targetPos.x, -12.4, 12.4);
+            targetPos.z = clamp(targetPos.z, stageEndZ + 1, stageStartZ + 1);
+            const toTarget = targetPos.sub(enemy.mesh.position); toTarget.y = 0;
+            const targetDist = toTarget.length();
+            if (targetDist > 0.6) {
+              enemy.mesh.position.addScaledVector(toTarget.normalize(), enemy.speed * dt);
+              enemyMoving = true;
+            } else if (dist > (enemy.kind === "boss" ? 2.15 : 1.55)) {
+              enemy.mesh.position.addScaledVector(toPlayer.clone().normalize(), enemy.speed * 0.45 * dt);
+              enemyMoving = true;
+            }
+            for (const other of enemies) if (other !== enemy) {
+              const apart = enemy.mesh.position.clone().sub(other.mesh.position); apart.y = 0;
+              const apartDist = apart.length();
+              const minSpace = enemy.kind === "boss" || other.kind === "boss" ? 2.35 : 1.75;
+              if (apartDist > 0.001 && apartDist < minSpace) enemy.mesh.position.addScaledVector(apart.normalize(), (minSpace - apartDist) * 2.8 * dt);
+            }
+          }
           enemy.mesh.position.x = clamp(enemy.mesh.position.x, -13.5, 13.5);
           enemy.mesh.position.z = clamp(enemy.mesh.position.z, stageEndZ - 2, stageStartZ + 2);
           animateStreetFighterMesh(enemy.mesh, dt, { moving: enemyMoving, enemySwing: enemy.attacking > 0 });
@@ -2041,8 +2072,8 @@ function StreetFightPro3DCanvas() {
             const angleOk = enemyDistance <= 1.25 || toEnemy.normalize().dot(forward) > 0.18;
             if (rangeOk && angleOk) {
               enemy.hp -= attackDamage;
-              enemy.hitStun = 0.26;
-              enemy.mesh.position.addScaledVector(forward, 0.95);
+              enemy.hitStun = enemy.kind === "boss" ? 0.14 : 0.2;
+              enemy.mesh.position.addScaledVector(forward, enemy.kind === "boss" ? 0.38 : 0.72);
               game.green = 100;
               game.attackHit = true;
               game.message = "Blocky auto-punch landed! Walk into range to keep the combo going.";
@@ -2057,16 +2088,19 @@ function StreetFightPro3DCanvas() {
             game.green = clamp(game.green + 18, 0, 100);
             continue;
           }
-          const closeEnough = dist < (enemy.kind === "boss" ? 2.45 : 1.8) && game.jump < 0.35;
+          const nearbyAttackers = enemies.filter((other) => other.activated && other.mesh.position.distanceTo(player.position) < 4.4).length;
+          const closeEnough = enemy.activated && dist < (enemy.kind === "boss" ? 2.65 : 2.05) && game.jump < 0.35;
           if (closeEnough && enemy.cooldown <= 0) {
             enemy.contactTime += dt;
-            if (enemy.contactTime > 0.62) {
-              game.hp -= enemy.damage;
-              player.position.addScaledVector(toPlayer.normalize(), 1.9);
-              enemy.cooldown = enemy.kind === "boss" ? 0.75 : 1.05;
+            if (enemy.contactTime > Math.max(0.28, 0.52 - nearbyAttackers * 0.055)) {
+              const teamBonus = Math.min(1.45, 1 + Math.max(0, nearbyAttackers - 1) * 0.12);
+              const hitDamage = Math.ceil(enemy.damage * teamBonus);
+              game.hp -= hitDamage;
+              player.position.addScaledVector(toPlayer.normalize(), 2.25);
+              enemy.cooldown = enemy.kind === "boss" ? 0.58 : 0.78;
               enemy.contactTime = 0;
               enemy.attacking = 0.34;
-              game.message = `Enemy stayed close and hit! You lost ${enemy.damage} red health.`;
+              game.message = nearbyAttackers > 1 ? `Team ambush hit! ${nearbyAttackers} enemies surrounded you for ${hitDamage} damage.` : `Enemy hit! You lost ${hitDamage} red health.`;
             }
           } else {
             enemy.contactTime = Math.max(0, enemy.contactTime - dt * 2.5);
