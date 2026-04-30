@@ -1723,19 +1723,13 @@ function StreetFightPro3DCanvas() {
     const tick = () => {
       const dt = Math.min(clock.getDelta(), 0.033);
       const keys = keysRef.current;
-      const jDown = keys.has("KeyJ");
       const kDown = keys.has("KeyK");
-      const iDown = keys.has("KeyI");
-      const lDown = keys.has("KeyL");
-      const jPressed = jDown && !game.prevJ;
       const kPressed = kDown && !game.prevK;
-      const iPressed = iDown && !game.prevI;
-      const lPressed = lDown && !game.prevL;
-      game.prevJ = jDown; game.prevK = kDown; game.prevI = iDown; game.prevL = lDown;
+      game.prevK = kDown;
 
       if (game.hp <= 0) {
-        if (iPressed) {
-          Object.assign(game, { stage: 1, hp: 120, green: 100, cooldown: 0, attackTimer: 0, message: "Restarted Blocky Bedroom Brawl." });
+        if (keys.has("KeyR") || keys.has("Enter")) {
+          Object.assign(game, { stage: 1, hp: 120, green: 100, cooldown: 0, attackTimer: 0, attackType: "none" as const, message: "Restarted Blocky Bedroom Brawl." });
           spawnStage();
         }
       } else if (game.stage <= 10) {
@@ -1762,18 +1756,28 @@ function StreetFightPro3DCanvas() {
         game.cooldown = Math.max(0, game.cooldown - dt);
         game.attackTimer = Math.max(0, game.attackTimer - dt);
         if (game.attackTimer <= 0) { game.attackType = "none"; game.attackHit = false; }
-        if (jPressed && game.cooldown <= 0) {
-          Object.assign(game, { attackType: "punch" as const, attackTimer: 0.2, attackHit: false, cooldown: 0.25, message: "J blocky punch: chunky square fist combo starter." });
-        } else if (lPressed && game.cooldown <= 0) {
-          Object.assign(game, { attackType: "kick" as const, attackTimer: 0.32, attackHit: false, cooldown: 0.42, message: "L kick: watch the leg extend for a longer-range hit." });
-        } else if (iPressed && game.cooldown <= 0 && game.green >= 25) {
-          game.green -= 25;
-          Object.assign(game, { attackType: "special" as const, attackTimer: 0.68, attackHit: false, cooldown: 0.95, message: "I special: tornado kick! It spends green health." });
-        } else if (iPressed && game.green < 25) game.message = "Need 25 green health for special.";
+
+        const autoPunchRange = 3.15;
+        let nearestEnemy: Street3DEnemy | undefined;
+        let nearestDistance = Infinity;
+        for (const enemy of enemies) {
+          const distance = enemy.mesh.position.distanceTo(player.position);
+          if (distance < nearestDistance) {
+            nearestEnemy = enemy;
+            nearestDistance = distance;
+          }
+        }
+        if (nearestEnemy && nearestDistance <= autoPunchRange && game.cooldown <= 0) {
+          const aim = nearestEnemy.mesh.position.clone().sub(player.position);
+          aim.y = 0;
+          if (aim.lengthSq() > 0.001) game.facing = Math.atan2(aim.x, -aim.z);
+          player.rotation.y = game.facing;
+          Object.assign(game, { attackType: "punch" as const, attackTimer: 0.18, attackHit: false, cooldown: 0.16, message: "Auto combo: blocky punches fire when enemies are close." });
+        }
 
         const forward = new THREE.Vector3(Math.sin(game.facing), 0, -Math.cos(game.facing));
-        const attackRange = game.attackType === "special" ? 5.25 : game.attackType === "kick" ? 3.65 : 2.65;
-        const attackDamage = game.attackType === "special" ? 22 : game.attackType === "kick" ? 18 : 12;
+        const attackRange = autoPunchRange;
+        const attackDamage = 10 + Math.min(game.stage, 10) * 0.8;
         animateStreetFighterMesh(player, dt, { moving: isMoving, jumping: game.jump > 0.05, attack: game.attackType, attacking: game.attackType !== "none" && game.attackTimer > 0 });
 
         for (let i = enemies.length - 1; i >= 0; i -= 1) {
@@ -1792,20 +1796,18 @@ function StreetFightPro3DCanvas() {
           enemy.healthBar.position.copy(enemy.mesh.position).add(new THREE.Vector3(0, enemy.kind === "boss" ? 4.6 : enemy.kind === "bruiser" ? 3.85 : 3.3, 0));
           enemy.healthBar.lookAt(camera.position);
           enemy.healthFill.scale.x = Math.max(0.03, enemy.hp / enemy.maxHp);
-          if (game.attackType !== "none" && game.attackTimer > 0 && (game.attackType === "special" || !game.attackHit)) {
+          if (game.attackType === "punch" && game.attackTimer > 0 && !game.attackHit) {
             const toEnemy = enemy.mesh.position.clone().sub(player.position); toEnemy.y = 0;
             const enemyDistance = toEnemy.length();
             const rangeOk = enemyDistance < attackRange + (enemy.kind === "boss" ? 1.2 : 0.4);
-            const angleOk = game.attackType === "special" || toEnemy.normalize().dot(forward) > 0.32;
-            const canHitThisEnemy = game.attackType !== "special" || enemy.hitStun <= 0;
-            if (rangeOk && angleOk && canHitThisEnemy) {
+            const angleOk = enemyDistance <= 1.25 || toEnemy.normalize().dot(forward) > 0.18;
+            if (rangeOk && angleOk) {
               enemy.hp -= attackDamage;
-              enemy.hitStun = game.attackType === "special" ? 0.58 : 0.3;
-              const knockDir = game.attackType === "special" && enemyDistance > 0 ? toEnemy.normalize() : forward;
-              enemy.mesh.position.addScaledVector(knockDir, game.attackType === "special" ? 2.0 : 1.1);
-              game.green = clamp(game.green + (game.attackType === "special" ? 0 : game.attackType === "kick" ? 15 : 13), 0, 100);
-              if (game.attackType !== "special") game.attackHit = true;
-              game.message = game.attackType === "special" ? "Tornado kick hit! Green was spent for the special." : "Hit confirmed! Green health restored.";
+              enemy.hitStun = 0.26;
+              enemy.mesh.position.addScaledVector(forward, 0.95);
+              game.green = 100;
+              game.attackHit = true;
+              game.message = "Blocky auto-punch landed! Walk into range to keep the combo going.";
             }
           }
           if (enemy.hp <= 0) {
@@ -1843,12 +1845,12 @@ function StreetFightPro3DCanvas() {
       camera.position.set(player.position.x, player.position.y + 7.4, player.position.z + 15.5);
       camera.lookAt(player.position.x, player.position.y + 1.25, player.position.z - 3.5);
       renderer.render(scene, camera);
-      const status = game.hp <= 0 ? "KNOCKED OUT • Press I to restart" : game.stage > 10 ? "COMPLETE" : game.message;
+      const status = game.hp <= 0 ? "KNOCKED OUT • Press R to restart" : game.stage > 10 ? "COMPLETE" : game.message;
       if (hudRef.current) {
-        hudRef.current.textContent = `Blocky Bedroom Brawl • Wave ${Math.min(game.stage, 10)} / 10 • ${status} • WASD move • J blocky punch • K jump • I tornado kick (-green) • L kick`;
+        hudRef.current.textContent = `Blocky Bedroom Brawl • Wave ${Math.min(game.stage, 10)} / 10 • ${status} • WASD move • Walk close to auto-punch • K jump`;
       }
       if (healthRef.current) {
-        healthRef.current.innerHTML = `<div class="mb-2 flex items-center justify-between text-xs font-black uppercase tracking-[0.18em] text-white"><span>Red Health</span><span>${Math.max(0, Math.round(game.hp))}/120</span></div><div class="h-4 overflow-hidden rounded-full bg-red-950 ring-1 ring-white/15"><div class="h-full rounded-full bg-red-500" style="width:${Math.max(0, Math.min(100, (game.hp / 120) * 100))}%"></div></div><div class="mb-2 mt-3 flex items-center justify-between text-xs font-black uppercase tracking-[0.18em] text-white"><span>Green Combo Health</span><span>${Math.round(game.green)}/100</span></div><div class="h-4 overflow-hidden rounded-full bg-emerald-950 ring-1 ring-white/15"><div class="h-full rounded-full bg-emerald-400" style="width:${Math.max(0, Math.min(100, game.green))}%"></div></div>`;
+        healthRef.current.innerHTML = `<div class="mb-2 flex items-center justify-between text-xs font-black uppercase tracking-[0.18em] text-white"><span>Red Health</span><span>${Math.max(0, Math.round(game.hp))}/120</span></div><div class="h-4 overflow-hidden rounded-full bg-red-950 ring-1 ring-white/15"><div class="h-full rounded-full bg-red-500" style="width:${Math.max(0, Math.min(100, (game.hp / 120) * 100))}%"></div></div><div class="mt-3 rounded-2xl border border-emerald-200/20 bg-emerald-300/10 p-3 text-xs font-black uppercase tracking-[0.16em] text-emerald-100">Auto punch range: walk up to enemies and the combo starts by itself.</div>`;
       }
       frame = requestAnimationFrame(tick);
     };
@@ -1873,9 +1875,8 @@ function StreetFightProGame({ onMenu }: { onMenu: () => void }) {
   return (
     <PlusShell
       title="Blocky Bedroom Brawl"
-      subtitle="$3 Pro slot: 10-wave blocky bedroom beat 'em up + 2D version available"
+      subtitle="$3 Pro slot: 10-wave auto-punch blocky bedroom beat 'em up"
       onMenu={onMenu}
-      modeAction={<button className="rounded-full border border-amber-200/25 bg-amber-300/15 px-4 py-2 text-sm font-bold uppercase tracking-[0.18em] text-amber-100 shadow-2xl backdrop-blur transition hover:bg-amber-300/25" onClick={() => setMode("2d")} type="button">2D Version</button>}
     >
       <StreetFightPro3DCanvas />
     </PlusShell>
@@ -1952,7 +1953,7 @@ function PlusPlanScreen({ continueToPlus }: { continueToPlus: (access: PlusAcces
               <li><strong className="text-amber-200">Tank Plus:</strong> run-through 3D tank stages with ambushes and boss tanks.</li>
               <li><strong className="text-cyan-200">Plane Plus:</strong> stage-based sky missions with boss planes.</li>
               <li><strong className="text-orange-200">Mario Plus:</strong> harder 2D stages, reachable coins, lucky blocks, and fireballs.</li>
-              <li><strong className="text-emerald-200">Blocky Bedroom Brawl:</strong> blocky wave-by-wave bedroom fights with chunky punches, kicks, jumps, and specials.</li>
+              <li><strong className="text-emerald-200">Blocky Bedroom Brawl:</strong> blocky wave-by-wave bedroom fights where walking into range starts auto-punch combos.</li>
             </ul>
             <p className="mt-4 rounded-2xl border border-cyan-200/15 bg-cyan-300/10 p-3 text-sm font-bold text-cyan-100">
               Free Trial opens the Plus games except Street Fight Pro. The $3 and $9 passwords unlock Street Fight Pro too.
@@ -1997,7 +1998,7 @@ function PlusPlanScreen({ continueToPlus }: { continueToPlus: (access: PlusAcces
               </p>
               {index === 1 && (
                 <div className="mt-3 rounded-2xl border border-emerald-200/25 bg-emerald-300/10 p-3 text-sm font-bold text-emerald-100">
-                  New under the $3 Pro slot: Blocky Bedroom Brawl — WASD move, J blocky punch, K jump, I special, L kick.
+                  New under the $3 Pro slot: Blocky Bedroom Brawl — WASD move, walk close to auto-punch, K jump.
                 </div>
               )}
               <span className="mt-6 inline-block rounded-full bg-white px-5 py-3 text-xs font-black uppercase tracking-[0.18em] text-slate-950">
@@ -2046,7 +2047,7 @@ function PlusMenu({ setGame, access }: { setGame: (game: PlusGame) => void; acce
     { id: "tank" as const, title: "Tank Plus Campaign", desc: "12 street stages. Roll forward, stop at ambushes, clear infantry and tanks, then defeat a boss tank at each stage end.", accent: "from-lime-300 to-emerald-500" },
     { id: "plane" as const, title: "Plane Plus Campaign", desc: "12 sky sorties with no infantry: fighters and bombers rush your lane, then a boss plane guards every stage finish.", accent: "from-cyan-300 to-blue-500" },
     { id: "mario" as const, title: "Mario Plus Worlds", desc: "12 harder obby stages with reachable coins, reachable lucky blocks, fire flowers, and fireballs.", accent: "from-amber-300 to-orange-500" },
-    { id: "street" as const, title: "Blocky Bedroom Brawl", desc: "$3 Pro-slot game. Fight wave by wave inside a normal bedroom with blocky characters, J blocky punch, K jump, I tornado kick, and L kick. 2D version included.", accent: "from-emerald-300 to-green-600" },
+    { id: "street" as const, title: "Blocky Bedroom Brawl", desc: "$3 Pro-slot game. Fight wave by wave inside a normal bedroom with blocky characters. Walk close and your character auto-punches; K jumps.", accent: "from-emerald-300 to-green-600" },
   ];
 
   return (
