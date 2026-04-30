@@ -1676,21 +1676,28 @@ function StreetFightPro3DCanvas() {
           box(3.8, 1.1, 0.55, 0xf59e0b, 6.8, 0.55, z - 6);
         }
       } else if (def.detail === "police") {
-        box(26, 5.5, stageLength, 0x111827, 0, 2.75, centerZ);
+        // Open-top police station interior: no giant opaque box, so the third-person camera can see inside.
         box(20, 0.32, stageLength + 2, 0x334155, 0, 0.08, centerZ);
+        for (let z = stageStartZ - 4; z > stageEndZ + 2; z -= 6) glowBox(20, 0.045, 0.12, z % 12 === 0 ? 0x64748b : 0x1e293b, 0, 0.26, z, 0.9);
         for (const side of [-1, 1]) {
-          box(5.2, 4.2, stageLength, 0x1e293b, side * 11.8, 2.1, centerZ);
+          box(0.55, 3.8, stageLength, 0x1e293b, side * 11.1, 1.9, centerZ);
           for (let z = stageStartZ - 8; z > stageEndZ + 4; z -= 12) {
-            box(0.18, 3.7, 0.18, 0x94a3b8, side * 8.9, 2.1, z);
-            box(0.18, 3.7, 0.18, 0x94a3b8, side * 8.9, 2.1, z + 1.25);
-            box(0.18, 3.7, 0.18, 0x94a3b8, side * 8.9, 2.1, z - 1.25);
-            box(0.18, 0.18, 3.2, 0xcbd5e1, side * 8.9, 3.7, z);
+            box(3.8, 0.22, 4.4, 0x0f172a, side * 8.7, 0.35, z);
+            box(0.18, 3.5, 0.18, 0xcbd5e1, side * 7.4, 2.0, z - 1.55);
+            box(0.18, 3.5, 0.18, 0xcbd5e1, side * 7.4, 2.0, z - 0.75);
+            box(0.18, 3.5, 0.18, 0xcbd5e1, side * 7.4, 2.0, z + 0.05);
+            box(0.18, 3.5, 0.18, 0xcbd5e1, side * 7.4, 2.0, z + 0.85);
+            box(0.18, 3.5, 0.18, 0xcbd5e1, side * 7.4, 2.0, z + 1.65);
+            box(0.2, 0.18, 3.9, 0xe2e8f0, side * 7.4, 3.65, z);
+            box(0.2, 0.18, 3.9, 0xe2e8f0, side * 7.4, 1.0, z);
+            glowBox(1.9, 0.42, 0.12, 0x60a5fa, side * 10.75, 3.2, z, 0.75);
           }
         }
         for (let z = stageStartZ - 12; z > stageEndZ + 8; z -= 18) {
-          glowBox(1.2, 0.22, 1.2, 0xef4444, -3.5, 3.15, z);
-          glowBox(1.2, 0.22, 1.2, 0x3b82f6, 3.5, 3.15, z);
+          glowBox(1.2, 0.22, 1.2, 0xef4444, -3.5, 3.15, z, 0.95);
+          glowBox(1.2, 0.22, 1.2, 0x3b82f6, 3.5, 3.15, z, 0.95);
           box(4.5, 0.9, 2.0, 0x0f172a, 0, 1.0, z);
+          glowBox(8.5, 0.14, 0.14, 0xffffff, 0, 4.7, z, 0.82);
         }
         box(13, 5.3, 0.7, 0x1d4ed8, 0, 2.65, stageEndZ - 3);
         glowBox(7.0, 1.0, 0.18, 0x60a5fa, 0, 4.35, stageEndZ - 2.55);
@@ -1757,13 +1764,17 @@ function StreetFightPro3DCanvas() {
         }
         for (let z = stageStartZ - 10; z > stageEndZ + 16; z -= 12) for (const x of [-11, 11]) glowBox(2.8, 5.5, 0.25, z % 24 === 0 ? 0x22d3ee : 0xd946ef, x, 2.8, z, 0.5);
       } else if (def.detail === "plane") {
-        box(30, 6.5, stageLength, 0xe2e8f0, 0, 3.0, centerZ);
+        // Open cabin walls/windows without a solid fuselage block in front of the camera.
         box(22, 0.34, stageLength, 0xb7c6d8, 0, 0.04, centerZ);
-        for (const x of [-13.8, 13.8]) for (let z = stageStartZ - 7; z > stageEndZ + 5; z -= 9) glowBox(2.0, 1.05, 0.12, 0x7dd3fc, x, 3.6, z, 0.75);
+        for (const x of [-12.8, 12.8]) {
+          box(0.6, 4.6, stageLength, 0xe2e8f0, x, 2.3, centerZ);
+          for (let z = stageStartZ - 7; z > stageEndZ + 5; z -= 9) glowBox(2.0, 1.05, 0.12, 0x7dd3fc, x > 0 ? 12.45 : -12.45, 3.6, z, 0.75);
+        }
         for (let z = stageStartZ - 12; z > stageEndZ + 10; z -= 8) {
           box(1.6, 1.5, 1.7, 0x1e3a8a, -5.5, 0.8, z);
           box(1.6, 1.5, 1.7, 0x1e3a8a, 5.5, 0.8, z);
           glowBox(0.14, 0.06, 6.0, 0x334155, 0, 0.18, z);
+          glowBox(8.5, 0.12, 0.12, 0xffffff, 0, 5.1, z, 0.65);
         }
       } else if (def.detail === "final") {
         const ring = envMesh(new THREE.TorusGeometry(10, 0.28, 8, 56), basic(0xfacc15), 0, 0.2, stageEndZ + 8); ring.rotation.x = Math.PI / 2;
