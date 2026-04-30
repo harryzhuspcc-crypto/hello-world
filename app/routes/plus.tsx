@@ -1602,7 +1602,46 @@ function StreetFightPro3DCanvas() {
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.domElement.style.cursor = "grab";
+    renderer.domElement.style.touchAction = "none";
     mount.appendChild(renderer.domElement);
+
+    const cameraControl = { yaw: 0, pitch: 0.52, distance: 20, dragging: false, lastX: 0, lastY: 0 };
+    const onContextMenu = (event: MouseEvent) => event.preventDefault();
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.button !== 2 && event.button !== 1 && !event.ctrlKey) return;
+      event.preventDefault();
+      cameraControl.dragging = true;
+      cameraControl.lastX = event.clientX;
+      cameraControl.lastY = event.clientY;
+      renderer.domElement.style.cursor = "grabbing";
+      renderer.domElement.setPointerCapture?.(event.pointerId);
+    };
+    const onPointerMove = (event: PointerEvent) => {
+      if (!cameraControl.dragging) return;
+      event.preventDefault();
+      const dx = event.clientX - cameraControl.lastX;
+      const dy = event.clientY - cameraControl.lastY;
+      cameraControl.lastX = event.clientX;
+      cameraControl.lastY = event.clientY;
+      cameraControl.yaw -= dx * 0.006;
+      cameraControl.pitch = clamp(cameraControl.pitch + dy * 0.0045, 0.16, 1.05);
+    };
+    const onPointerUp = (event: PointerEvent) => {
+      if (!cameraControl.dragging) return;
+      cameraControl.dragging = false;
+      renderer.domElement.style.cursor = "grab";
+      renderer.domElement.releasePointerCapture?.(event.pointerId);
+    };
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      cameraControl.distance = clamp(cameraControl.distance + event.deltaY * 0.01, 10, 32);
+    };
+    renderer.domElement.addEventListener("contextmenu", onContextMenu);
+    renderer.domElement.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("pointermove", onPointerMove, { passive: false });
+    window.addEventListener("pointerup", onPointerUp);
+    renderer.domElement.addEventListener("wheel", onWheel, { passive: false });
 
     scene.add(new THREE.HemisphereLight(0xcde7ff, 0x2d160c, 1.15));
     const mainLight = new THREE.DirectionalLight(0xffd79d, 1.85);
@@ -2045,13 +2084,19 @@ function StreetFightPro3DCanvas() {
         }
       }
 
-      camera.position.set(player.position.x, player.position.y + 7.4, player.position.z + 15.5);
-      camera.lookAt(player.position.x, player.position.y + 1.25, player.position.z - 5.2);
+      const cameraTarget = new THREE.Vector3(player.position.x, player.position.y + 1.45, player.position.z - 2.8);
+      const cameraHorizontal = Math.cos(cameraControl.pitch) * cameraControl.distance;
+      camera.position.set(
+        cameraTarget.x + Math.sin(cameraControl.yaw) * cameraHorizontal,
+        cameraTarget.y + Math.sin(cameraControl.pitch) * cameraControl.distance + 1.0,
+        cameraTarget.z + Math.cos(cameraControl.yaw) * cameraHorizontal,
+      );
+      camera.lookAt(cameraTarget);
       renderer.render(scene, camera);
       const status = game.hp <= 0 ? "KNOCKED OUT • Press R to restart" : game.stage > TOTAL_STAGES ? "COMPLETE" : game.message;
       const stageName = stageDefs[Math.min(game.stage, TOTAL_STAGES) - 1]?.name ?? "Complete";
       if (hudRef.current) {
-        hudRef.current.textContent = `Blocky Street Fight • Stage ${Math.min(game.stage, TOTAL_STAGES)} / ${TOTAL_STAGES}: ${stageName} • ${status} • W/↑ forward • Walk close to auto-punch • Break bins and stand on green pad to heal`;
+        hudRef.current.textContent = `Blocky Street Fight • Stage ${Math.min(game.stage, TOTAL_STAGES)} / ${TOTAL_STAGES}: ${stageName} • ${status} • W/↑ forward • 2-finger/right-click drag rotates camera • Scroll zooms • Auto-punch enemies/bins`;
       }
       if (healthRef.current) {
         healthRef.current.innerHTML = `<div class="mb-2 flex items-center justify-between text-xs font-black uppercase tracking-[0.18em] text-white"><span>Red Health</span><span>${Math.max(0, Math.round(game.hp))}/120</span></div><div class="h-4 overflow-hidden rounded-full bg-red-950 ring-1 ring-white/15"><div class="h-full rounded-full bg-red-500" style="width:${Math.max(0, Math.min(100, (game.hp / 120) * 100))}%"></div></div><div class="mt-3 rounded-2xl border border-emerald-200/20 bg-emerald-300/10 p-3 text-xs font-black uppercase tracking-[0.16em] text-emerald-100">Walk forward. Auto-punch enemies and bins. Broken bins become green healing pads.</div>`;
@@ -2063,6 +2108,11 @@ function StreetFightPro3DCanvas() {
     return () => {
       cancelAnimationFrame(frame);
       window.removeEventListener("resize", resize);
+      renderer.domElement.removeEventListener("contextmenu", onContextMenu);
+      renderer.domElement.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      renderer.domElement.removeEventListener("wheel", onWheel);
       clearEnemies();
       clearBins();
       clearEnvironment();
