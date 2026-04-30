@@ -26,7 +26,7 @@ export function meta({}: Route.MetaArgs) {
     { title: "GET PLUS | Harry's Game Center" },
     {
       name: "description",
-      content: "Plus and Pro campaign modes with stage-based tank, plane, platformer, and street fighting adventures.",
+      content: "Plus and Pro campaign modes with stage-based tank, plane, platformer, and blocky bedroom brawl adventures.",
     },
   ];
 }
@@ -573,27 +573,36 @@ function createStreetFighterMesh(kind: "player" | "thug" | "bruiser" | "boss") {
   const skin = new THREE.MeshStandardMaterial({ color: 0xf0b68a, roughness: 0.75 });
   const cloth = new THREE.MeshStandardMaterial({ color: bodyColor, roughness: 0.82 });
   const dark = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.9 });
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.9 * scale, 1.35 * scale, 0.42 * scale), cloth);
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(1.05 * scale, 1.25 * scale, 0.58 * scale), cloth);
   torso.position.y = 1.55 * scale;
   group.add(torso);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.32 * scale, 16, 12), skin);
-  head.position.y = 2.48 * scale;
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.62 * scale, 0.62 * scale, 0.62 * scale), skin);
+  head.position.y = 2.52 * scale;
   group.add(head);
-  const leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.25 * scale, 0.8 * scale, 0.28 * scale), dark);
-  leftLeg.position.set(-0.34 * scale, 0.55 * scale, 0);
+  const face = new THREE.Mesh(new THREE.BoxGeometry(0.38 * scale, 0.12 * scale, 0.03 * scale), new THREE.MeshBasicMaterial({ color: 0x111827 }));
+  face.position.set(0, 2.52 * scale, -0.325 * scale);
+  group.add(face);
+  const leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.34 * scale, 0.86 * scale, 0.34 * scale), dark);
+  leftLeg.position.set(-0.32 * scale, 0.55 * scale, 0);
   group.add(leftLeg);
-  const rightLeg = new THREE.Mesh(new THREE.BoxGeometry(0.25 * scale, 0.8 * scale, 0.28 * scale), dark);
-  rightLeg.position.set(0.34 * scale, 0.55 * scale, 0);
+  const rightLeg = new THREE.Mesh(new THREE.BoxGeometry(0.34 * scale, 0.86 * scale, 0.34 * scale), dark);
+  rightLeg.position.set(0.32 * scale, 0.55 * scale, 0);
   group.add(rightLeg);
-  const leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.22 * scale, 0.88 * scale, 0.22 * scale), skin);
-  leftArm.position.set(-0.58 * scale, 1.62 * scale, -0.04);
-  leftArm.rotation.z = 0.18;
+  const leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.32 * scale, 0.94 * scale, 0.32 * scale), skin);
+  leftArm.position.set(-0.73 * scale, 1.62 * scale, -0.04);
+  leftArm.rotation.z = 0.08;
   group.add(leftArm);
-  const rightArm = new THREE.Mesh(new THREE.BoxGeometry(0.22 * scale, 0.88 * scale, 0.22 * scale), skin);
-  rightArm.position.set(0.58 * scale, 1.62 * scale, -0.04);
-  rightArm.rotation.z = -0.18;
+  const rightArm = new THREE.Mesh(new THREE.BoxGeometry(0.32 * scale, 0.94 * scale, 0.32 * scale), skin);
+  rightArm.position.set(0.73 * scale, 1.62 * scale, -0.04);
+  rightArm.rotation.z = -0.08;
   group.add(rightArm);
-  group.userData.limbs = { torso, head, leftLeg, rightLeg, leftArm, rightArm, scale };
+  const leftFist = new THREE.Mesh(new THREE.BoxGeometry(0.38 * scale, 0.28 * scale, 0.38 * scale), skin);
+  leftFist.position.set(-0.73 * scale, 1.06 * scale, -0.04);
+  group.add(leftFist);
+  const rightFist = new THREE.Mesh(new THREE.BoxGeometry(0.38 * scale, 0.28 * scale, 0.38 * scale), skin);
+  rightFist.position.set(0.73 * scale, 1.06 * scale, -0.04);
+  group.add(rightFist);
+  group.userData.limbs = { torso, head, leftLeg, rightLeg, leftArm, rightArm, leftFist, rightFist, scale };
   if (kind === "boss") {
     const crown = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.18, 0.46), new THREE.MeshBasicMaterial({ color: 0xfacc15 }));
     crown.position.y = 3.78;
@@ -603,7 +612,7 @@ function createStreetFighterMesh(kind: "player" | "thug" | "bruiser" | "boss") {
 }
 
 function animateStreetFighterMesh(mesh: THREE.Object3D, dt: number, options: { moving?: boolean; jumping?: boolean; attack?: "none" | "punch" | "kick" | "special"; attacking?: boolean; enemySwing?: boolean }) {
-  const limbs = mesh.userData.limbs as { torso: THREE.Mesh; head: THREE.Mesh; leftLeg: THREE.Mesh; rightLeg: THREE.Mesh; leftArm: THREE.Mesh; rightArm: THREE.Mesh; scale: number } | undefined;
+  const limbs = mesh.userData.limbs as { torso: THREE.Mesh; head: THREE.Mesh; leftLeg: THREE.Mesh; rightLeg: THREE.Mesh; leftArm: THREE.Mesh; rightArm: THREE.Mesh; leftFist?: THREE.Mesh; rightFist?: THREE.Mesh; scale: number } | undefined;
   if (!limbs) return;
   const t = performance.now() * 0.012;
   const walk = options.moving ? Math.sin(t) * 0.65 : 0;
@@ -614,10 +623,12 @@ function animateStreetFighterMesh(mesh: THREE.Object3D, dt: number, options: { m
   let rightArmX = walk * 0.55;
   let torsoZ = options.moving ? Math.sin(t) * 0.05 : 0;
   if (options.attacking && options.attack === "punch") {
-    rightArmX = -1.45;
+    rightArmX = -1.58;
     leftLegX = 0.38;
     rightLegX = -0.28;
-    limbs.rightArm.position.z = THREE.MathUtils.lerp(limbs.rightArm.position.z, -0.62 * limbs.scale, dt * 18);
+    limbs.rightArm.position.z = THREE.MathUtils.lerp(limbs.rightArm.position.z, -1.18 * limbs.scale, dt * 26);
+    if (limbs.rightFist) limbs.rightFist.position.z = THREE.MathUtils.lerp(limbs.rightFist.position.z, -1.72 * limbs.scale, dt * 30);
+    if (limbs.rightFist) limbs.rightFist.position.y = THREE.MathUtils.lerp(limbs.rightFist.position.y, 1.5 * limbs.scale, dt * 24);
     torsoZ += 0.2;
   } else if (options.attacking && options.attack === "kick") {
     rightLegX = -1.72;
@@ -643,6 +654,8 @@ function animateStreetFighterMesh(mesh: THREE.Object3D, dt: number, options: { m
     torsoZ += 0.16;
   } else {
     limbs.rightArm.position.z = THREE.MathUtils.lerp(limbs.rightArm.position.z, -0.04, dt * 10);
+    if (limbs.rightFist) limbs.rightFist.position.z = THREE.MathUtils.lerp(limbs.rightFist.position.z, -0.04, dt * 10);
+    if (limbs.rightFist) limbs.rightFist.position.y = THREE.MathUtils.lerp(limbs.rightFist.position.y, 1.06 * limbs.scale, dt * 10);
     limbs.leftLeg.position.z = THREE.MathUtils.lerp(limbs.leftLeg.position.z, 0, dt * 10);
     limbs.rightLeg.position.z = THREE.MathUtils.lerp(limbs.rightLeg.position.z, 0, dt * 10);
     limbs.leftLeg.position.y = THREE.MathUtils.lerp(limbs.leftLeg.position.y, 0.55 * limbs.scale, dt * 10);
@@ -1591,42 +1604,57 @@ function StreetFightPro3DCanvas() {
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     mount.appendChild(renderer.domElement);
 
-    scene.add(new THREE.HemisphereLight(0xbfd7ff, 0x2d160c, 1.05));
-    const streetLight = new THREE.DirectionalLight(0xffd79d, 1.75);
-    streetLight.position.set(14, 28, 18);
-    scene.add(streetLight);
-    const rim = new THREE.DirectionalLight(0x67e8f9, 0.8);
-    rim.position.set(-18, 16, -26);
-    scene.add(rim);
+    scene.add(new THREE.HemisphereLight(0xf8fafc, 0x8b6f5c, 1.25));
+    const ceilingLight = new THREE.PointLight(0xfff2cf, 2.4, 55);
+    ceilingLight.position.set(0, 9, 0);
+    scene.add(ceilingLight);
+    const windowLight = new THREE.DirectionalLight(0x9fd3ff, 1.25);
+    windowLight.position.set(-12, 9, -10);
+    scene.add(windowLight);
 
-    const road = new THREE.Mesh(new THREE.BoxGeometry(34, 0.18, 285), new THREE.MeshStandardMaterial({ color: 0x24272e, roughness: 0.95 }));
-    road.position.set(0, -0.04, -92);
-    scene.add(road);
-    const sidewalkMaterial = new THREE.MeshStandardMaterial({ color: 0x42464e, roughness: 0.92 });
-    for (const x of [-22, 22]) {
-      const sidewalk = new THREE.Mesh(new THREE.BoxGeometry(10, 0.24, 285), sidewalkMaterial);
-      sidewalk.position.set(x, 0.02, -92);
-      scene.add(sidewalk);
+    scene.background = new THREE.Color(0xd9e4f2);
+    scene.fog = new THREE.Fog(0xd9e4f2, 35, 90);
+    const floor = new THREE.Mesh(new THREE.BoxGeometry(31, 0.22, 27), new THREE.MeshStandardMaterial({ color: 0xb78b63, roughness: 0.82 }));
+    floor.position.set(0, -0.12, 0);
+    scene.add(floor);
+    const backWall = new THREE.Mesh(new THREE.BoxGeometry(31, 10, 0.35), new THREE.MeshStandardMaterial({ color: 0xc7ddff, roughness: 0.9 }));
+    backWall.position.set(0, 5, -13.7);
+    scene.add(backWall);
+    const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.35, 10, 27), new THREE.MeshStandardMaterial({ color: 0xd9c8ff, roughness: 0.9 }));
+    leftWall.position.set(-15.7, 5, 0);
+    scene.add(leftWall);
+    const rightWall = new THREE.Mesh(new THREE.BoxGeometry(0.35, 10, 27), new THREE.MeshStandardMaterial({ color: 0xd9c8ff, roughness: 0.9 }));
+    rightWall.position.set(15.7, 5, 0);
+    scene.add(rightWall);
+    const rug = new THREE.Mesh(new THREE.BoxGeometry(13, 0.08, 8), new THREE.MeshStandardMaterial({ color: 0x5b7cfa, roughness: 0.85 }));
+    rug.position.set(0, 0.02, 0);
+    scene.add(rug);
+    const bed = new THREE.Mesh(new THREE.BoxGeometry(8.5, 1.2, 5.4), new THREE.MeshStandardMaterial({ color: 0x73b3ff, roughness: 0.75 }));
+    bed.position.set(-9.2, 0.62, -8.4);
+    scene.add(bed);
+    const pillow = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.45, 1.2), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.65 }));
+    pillow.position.set(-11.2, 1.45, -10.0);
+    scene.add(pillow);
+    const desk = new THREE.Mesh(new THREE.BoxGeometry(6.5, 0.55, 2.5), new THREE.MeshStandardMaterial({ color: 0x7c4f2b, roughness: 0.8 }));
+    desk.position.set(9, 1.95, -11.0);
+    scene.add(desk);
+    for (const x of [6.6, 11.4]) {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.35, 1.9, 0.35), new THREE.MeshStandardMaterial({ color: 0x5f3a20, roughness: 0.85 }));
+      leg.position.set(x, 0.95, -10.2);
+      scene.add(leg);
     }
-    const lineMaterial = new THREE.MeshBasicMaterial({ color: 0xfacc15 });
-    for (let i = 0; i < 30; i += 1) {
-      const line = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.04, 4.2), lineMaterial);
-      line.position.set(0, 0.09, 38 - i * 9.5);
-      scene.add(line);
-    }
-    for (let i = 0; i < 22; i += 1) {
-      const side = i % 2 === 0 ? -1 : 1;
-      const height = THREE.MathUtils.randFloat(8, 20);
-      const building = new THREE.Mesh(new THREE.BoxGeometry(THREE.MathUtils.randFloat(7, 13), height, THREE.MathUtils.randFloat(8, 18)), new THREE.MeshStandardMaterial({ color: i % 3 === 0 ? 0x263147 : 0x30283c, roughness: 0.86 }));
-      building.position.set(side * THREE.MathUtils.randFloat(31, 43), height / 2, 36 - i * 13);
-      scene.add(building);
-      const sign = new THREE.Mesh(new THREE.BoxGeometry(3.8, 1.1, 0.16), new THREE.MeshBasicMaterial({ color: i % 2 === 0 ? 0x22c55e : 0xfacc15 }));
-      sign.position.set(building.position.x - side * 3.2, 3.7, building.position.z + 3.8);
-      scene.add(sign);
-    }
+    const chair = new THREE.Mesh(new THREE.BoxGeometry(2.1, 1.2, 2.0), new THREE.MeshStandardMaterial({ color: 0x374151, roughness: 0.8 }));
+    chair.position.set(7.4, 0.7, -7.4);
+    scene.add(chair);
+    const windowFrame = new THREE.Mesh(new THREE.BoxGeometry(5.2, 3.2, 0.18), new THREE.MeshBasicMaterial({ color: 0x38bdf8 }));
+    windowFrame.position.set(-4.5, 5.8, -13.5);
+    scene.add(windowFrame);
+    const poster = new THREE.Mesh(new THREE.BoxGeometry(3.5, 2.4, 0.16), new THREE.MeshBasicMaterial({ color: 0xf97316 }));
+    poster.position.set(6.5, 5.5, -13.45);
+    scene.add(poster);
 
     const player = createStreetFighterMesh("player");
-    player.position.set(0, 0, 34);
+    player.position.set(0, 0, 7);
     scene.add(player);
 
     type Street3DEnemy = ThreeActor & { damage: number; hitStun: number; contactTime: number; attacking: number; healthBar: THREE.Group; healthFill: THREE.Mesh };
@@ -1646,7 +1674,7 @@ function StreetFightPro3DCanvas() {
       prevK: false,
       prevI: false,
       prevL: false,
-      message: "3D Street Fight Pro: clear the block stage by stage.",
+      message: "Blocky Bedroom Brawl: survive each wave in the bedroom."
     };
 
     const clearEnemies = () => {
@@ -1664,7 +1692,8 @@ function StreetFightPro3DCanvas() {
         const isBoss = i === count - 1 && (game.stage % 3 === 0 || game.stage === 10);
         const kind: "thug" | "bruiser" | "boss" = isBoss ? "boss" : i % 4 === 2 ? "bruiser" : "thug";
         const mesh = createStreetFighterMesh(kind);
-        mesh.position.set(THREE.MathUtils.randFloatSpread(11), 0, -18 - i * 13);
+        const angle = (i / count) * Math.PI * 2 + Math.random() * 0.35;
+        mesh.position.set(Math.sin(angle) * THREE.MathUtils.randFloat(5.5, 11.5), 0, Math.cos(angle) * THREE.MathUtils.randFloat(4.8, 10.5));
         scene.add(mesh);
         const hp = kind === "boss" ? 130 + game.stage * 30 : kind === "bruiser" ? 52 + game.stage * 9 : 30 + game.stage * 6;
         const healthBar = new THREE.Group();
@@ -1676,9 +1705,9 @@ function StreetFightPro3DCanvas() {
         scene.add(healthBar);
         enemies.push({ mesh, kind, hp, maxHp: hp, cooldown: 0.6 + i * 0.2, speed: kind === "boss" ? 4.4 : kind === "bruiser" ? 5.5 : 6.7, damage: kind === "boss" ? 23 + game.stage * 2 : kind === "bruiser" ? 15 + game.stage : 9 + game.stage, hitStun: 0, contactTime: 0, attacking: 0, healthBar, healthFill });
       }
-      player.position.set(0, 0, 34);
+      player.position.set(0, 0, 7);
       game.green = 100;
-      game.message = `3D Stage ${game.stage}: street gang ahead.`;
+      game.message = `Wave ${game.stage}: blocky enemies spawned around the bedroom.`;
     };
     spawnStage();
 
@@ -1706,7 +1735,7 @@ function StreetFightPro3DCanvas() {
 
       if (game.hp <= 0) {
         if (iPressed) {
-          Object.assign(game, { stage: 1, hp: 120, green: 100, cooldown: 0, attackTimer: 0, message: "Restarted Street Fight Pro 3D." });
+          Object.assign(game, { stage: 1, hp: 120, green: 100, cooldown: 0, attackTimer: 0, message: "Restarted Blocky Bedroom Brawl." });
           spawnStage();
         }
       } else if (game.stage <= 10) {
@@ -1719,9 +1748,8 @@ function StreetFightPro3DCanvas() {
           player.position.addScaledVector(move, 9.6 * dt);
           game.facing = Math.atan2(move.x, -move.z);
         }
-        player.position.x = clamp(player.position.x, -13, 13);
-        player.position.z = clamp(player.position.z, -226, 38);
-        if (enemies.length > 0) player.position.z = Math.max(player.position.z, -165);
+        player.position.x = clamp(player.position.x, -14, 14);
+        player.position.z = clamp(player.position.z, -12, 12);
         player.rotation.y = game.facing;
 
         if (kPressed && game.jump <= 0) { game.jumpV = 7.5; game.message = "K jump: hop over close enemies."; }
@@ -1735,7 +1763,7 @@ function StreetFightPro3DCanvas() {
         game.attackTimer = Math.max(0, game.attackTimer - dt);
         if (game.attackTimer <= 0) { game.attackType = "none"; game.attackHit = false; }
         if (jPressed && game.cooldown <= 0) {
-          Object.assign(game, { attackType: "punch" as const, attackTimer: 0.18, attackHit: false, cooldown: 0.24, message: "J punch: quick Streets-of-Rage-style combo starter." });
+          Object.assign(game, { attackType: "punch" as const, attackTimer: 0.2, attackHit: false, cooldown: 0.25, message: "J blocky punch: chunky square fist combo starter." });
         } else if (lPressed && game.cooldown <= 0) {
           Object.assign(game, { attackType: "kick" as const, attackTimer: 0.32, attackHit: false, cooldown: 0.42, message: "L kick: watch the leg extend for a longer-range hit." });
         } else if (iPressed && game.cooldown <= 0 && game.green >= 25) {
@@ -1758,7 +1786,8 @@ function StreetFightPro3DCanvas() {
           enemy.mesh.lookAt(player.position.x, enemy.mesh.position.y, player.position.z);
           const enemyMoving = enemy.hitStun <= 0 && dist > 2.0;
           if (enemyMoving) enemy.mesh.position.addScaledVector(toPlayer.normalize(), enemy.speed * dt);
-          enemy.mesh.position.x = clamp(enemy.mesh.position.x, -13.5, 13.5);
+          enemy.mesh.position.x = clamp(enemy.mesh.position.x, -14.2, 14.2);
+          enemy.mesh.position.z = clamp(enemy.mesh.position.z, -12.2, 12.2);
           animateStreetFighterMesh(enemy.mesh, dt, { moving: enemyMoving, enemySwing: enemy.attacking > 0 });
           enemy.healthBar.position.copy(enemy.mesh.position).add(new THREE.Vector3(0, enemy.kind === "boss" ? 4.6 : enemy.kind === "bruiser" ? 3.85 : 3.3, 0));
           enemy.healthBar.lookAt(camera.position);
@@ -1807,16 +1836,16 @@ function StreetFightPro3DCanvas() {
           game.stage += 1;
           game.hp = Math.min(120, game.hp + 18);
           if (game.stage <= 10) spawnStage();
-          else game.message = "Street Fight Pro 3D complete!";
+          else game.message = "Blocky Bedroom Brawl complete!";
         }
       }
 
-      camera.position.set(player.position.x, player.position.y + 6.2, player.position.z + 13.5);
-      camera.lookAt(player.position.x, player.position.y + 1.2, player.position.z - 8);
+      camera.position.set(player.position.x, player.position.y + 7.4, player.position.z + 15.5);
+      camera.lookAt(player.position.x, player.position.y + 1.25, player.position.z - 3.5);
       renderer.render(scene, camera);
       const status = game.hp <= 0 ? "KNOCKED OUT • Press I to restart" : game.stage > 10 ? "COMPLETE" : game.message;
       if (hudRef.current) {
-        hudRef.current.textContent = `Street Fight Pro 3D • Stage ${Math.min(game.stage, 10)} / 10 • ${status} • WASD move • J punch • K jump • I tornado kick (-green) • L kick`;
+        hudRef.current.textContent = `Blocky Bedroom Brawl • Wave ${Math.min(game.stage, 10)} / 10 • ${status} • WASD move • J blocky punch • K jump • I tornado kick (-green) • L kick`;
       }
       if (healthRef.current) {
         healthRef.current.innerHTML = `<div class="mb-2 flex items-center justify-between text-xs font-black uppercase tracking-[0.18em] text-white"><span>Red Health</span><span>${Math.max(0, Math.round(game.hp))}/120</span></div><div class="h-4 overflow-hidden rounded-full bg-red-950 ring-1 ring-white/15"><div class="h-full rounded-full bg-red-500" style="width:${Math.max(0, Math.min(100, (game.hp / 120) * 100))}%"></div></div><div class="mb-2 mt-3 flex items-center justify-between text-xs font-black uppercase tracking-[0.18em] text-white"><span>Green Combo Health</span><span>${Math.round(game.green)}/100</span></div><div class="h-4 overflow-hidden rounded-full bg-emerald-950 ring-1 ring-white/15"><div class="h-full rounded-full bg-emerald-400" style="width:${Math.max(0, Math.min(100, game.green))}%"></div></div>`;
@@ -1843,8 +1872,8 @@ function StreetFightProGame({ onMenu }: { onMenu: () => void }) {
   if (mode === "2d") return <StreetFightPro2DGame onMenu={onMenu} on3d={() => setMode("3d")} />;
   return (
     <PlusShell
-      title="Street Fight Pro 3D"
-      subtitle="$3 Pro slot: 10-stage 3D street fighting + 2D version available"
+      title="Blocky Bedroom Brawl"
+      subtitle="$3 Pro slot: 10-wave blocky bedroom beat 'em up + 2D version available"
       onMenu={onMenu}
       modeAction={<button className="rounded-full border border-amber-200/25 bg-amber-300/15 px-4 py-2 text-sm font-bold uppercase tracking-[0.18em] text-amber-100 shadow-2xl backdrop-blur transition hover:bg-amber-300/25" onClick={() => setMode("2d")} type="button">2D Version</button>}
     >
@@ -1923,7 +1952,7 @@ function PlusPlanScreen({ continueToPlus }: { continueToPlus: (access: PlusAcces
               <li><strong className="text-amber-200">Tank Plus:</strong> run-through 3D tank stages with ambushes and boss tanks.</li>
               <li><strong className="text-cyan-200">Plane Plus:</strong> stage-based sky missions with boss planes.</li>
               <li><strong className="text-orange-200">Mario Plus:</strong> harder 2D stages, reachable coins, lucky blocks, and fireballs.</li>
-              <li><strong className="text-emerald-200">Street Fight Pro:</strong> 3D stage-by-stage street fights with punch, kick, jump, and special moves.</li>
+              <li><strong className="text-emerald-200">Blocky Bedroom Brawl:</strong> blocky wave-by-wave bedroom fights with chunky punches, kicks, jumps, and specials.</li>
             </ul>
             <p className="mt-4 rounded-2xl border border-cyan-200/15 bg-cyan-300/10 p-3 text-sm font-bold text-cyan-100">
               Free Trial opens the Plus games except Street Fight Pro. The $3 and $9 passwords unlock Street Fight Pro too.
@@ -1968,7 +1997,7 @@ function PlusPlanScreen({ continueToPlus }: { continueToPlus: (access: PlusAcces
               </p>
               {index === 1 && (
                 <div className="mt-3 rounded-2xl border border-emerald-200/25 bg-emerald-300/10 p-3 text-sm font-bold text-emerald-100">
-                  New under the $3 Pro slot: Street Fight Pro 3D — WASD move, J punch, K jump, I special, L kick.
+                  New under the $3 Pro slot: Blocky Bedroom Brawl — WASD move, J blocky punch, K jump, I special, L kick.
                 </div>
               )}
               <span className="mt-6 inline-block rounded-full bg-white px-5 py-3 text-xs font-black uppercase tracking-[0.18em] text-slate-950">
@@ -2017,7 +2046,7 @@ function PlusMenu({ setGame, access }: { setGame: (game: PlusGame) => void; acce
     { id: "tank" as const, title: "Tank Plus Campaign", desc: "12 street stages. Roll forward, stop at ambushes, clear infantry and tanks, then defeat a boss tank at each stage end.", accent: "from-lime-300 to-emerald-500" },
     { id: "plane" as const, title: "Plane Plus Campaign", desc: "12 sky sorties with no infantry: fighters and bombers rush your lane, then a boss plane guards every stage finish.", accent: "from-cyan-300 to-blue-500" },
     { id: "mario" as const, title: "Mario Plus Worlds", desc: "12 harder obby stages with reachable coins, reachable lucky blocks, fire flowers, and fireballs.", accent: "from-amber-300 to-orange-500" },
-    { id: "street" as const, title: "Street Fight Pro 3D", desc: "$3 Pro-slot game. Fight stage by stage through 3D city streets with WASD movement, J punch, K jump, I special, and L kick. 2D version included.", accent: "from-emerald-300 to-green-600" },
+    { id: "street" as const, title: "Blocky Bedroom Brawl", desc: "$3 Pro-slot game. Fight wave by wave inside a normal bedroom with blocky characters, J blocky punch, K jump, I tornado kick, and L kick. 2D version included.", accent: "from-emerald-300 to-green-600" },
   ];
 
   return (
