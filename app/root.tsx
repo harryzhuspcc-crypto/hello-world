@@ -42,7 +42,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
-const GAME_CENTER_PASSWORD = "1234";
+const GAME_CENTER_PASSWORD = "5933";
 
 function GameCenterPasswordGate({ onUnlock }: { onUnlock: () => void }) {
   const [password, setPassword] = useState("");
