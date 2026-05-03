@@ -11,7 +11,7 @@ export function meta({}: Route.MetaArgs) {
 }
 
 type Lane = 0 | 1 | 2 | 3;
-type Note = { lane: Lane; hitTime: number; hit: boolean; missed: boolean };
+type Note = { lane: Lane; hitTime: number; hit: boolean; missed: boolean; travelTime: number };
 
 const lanes = [
   { key: "ArrowLeft", label: "←", name: "LEFT", color: "#38bdf8" },
@@ -22,27 +22,28 @@ const lanes = [
 
 function createChart() {
   const notes: Note[] = [];
-  let time = 1.6;
-  const patterns: Lane[][] = [
-    [0, 1, 2, 3],
-    [3, 2, 1, 0],
-    [0, 2, 1, 3],
-    [1, 3, 0, 2],
-    [0, 0, 1, 2, 3, 3],
-    [2, 1, 2, 3, 0, 1],
+  let time = 1.25;
+  const add = (lane: Lane, hitTime: number, travelTime: number) => notes.push({ lane, hitTime, travelTime, hit: false, missed: false });
+  const addChord = (chord: Lane[], hitTime: number, travelTime: number) => chord.forEach((lane) => add(lane, hitTime, travelTime));
+  const sections: Array<{ interval: number; travel: number; pattern: Array<Lane | Lane[]>; repeats: number; rest: number }> = [
+    { interval: 0.82, travel: 2.55, pattern: [0, 1, 2, 3], repeats: 2, rest: 0.75 },
+    { interval: 0.68, travel: 2.35, pattern: [0, 1, 2, 3, 3, 2, 1, 0], repeats: 2, rest: 0.55 },
+    { interval: 0.56, travel: 2.12, pattern: [0, 2, 1, 3, 1, 2, 0, 3], repeats: 2, rest: 0.45 },
+    { interval: 0.48, travel: 1.92, pattern: [0, 1, [2, 3], 2, 3, 1, [0, 2], 3], repeats: 2, rest: 0.38 },
+    { interval: 0.40, travel: 1.72, pattern: [0, [1, 3], 2, 0, 3, [0, 2], 1, 3], repeats: 3, rest: 0.32 },
+    { interval: 0.34, travel: 1.52, pattern: [[0, 3], 1, 2, [0, 2], 3, 1, [1, 3], 0], repeats: 3, rest: 0.24 },
+    { interval: 0.29, travel: 1.34, pattern: [0, 1, [2, 3], 2, [0, 1], 3, 2, [0, 3], 1, 2], repeats: 4, rest: 0.18 },
   ];
-  for (let section = 0; section < 10; section += 1) {
-    const interval = Math.max(0.28, 0.48 - section * 0.018);
-    const pattern = patterns[section % patterns.length];
-    for (let repeat = 0; repeat < 4; repeat += 1) {
-      for (const lane of pattern) {
-        notes.push({ lane, hitTime: time, hit: false, missed: false });
-        if (section > 2 && repeat % 2 === 1) notes.push({ lane: ((lane + 2) % 4) as Lane, hitTime: time + interval * 0.52, hit: false, missed: false });
-        time += interval;
+
+  for (const section of sections) {
+    for (let repeat = 0; repeat < section.repeats; repeat += 1) {
+      for (const item of section.pattern) {
+        if (Array.isArray(item)) addChord(item, time, section.travel);
+        else add(item, time, section.travel);
+        time += section.interval;
       }
-      time += 0.18;
+      time += section.rest;
     }
-    time += 0.55;
   }
   return notes;
 }
@@ -60,33 +61,131 @@ export default function RhythmRush() {
 
     const state = {
       notes: createChart(),
+      started: false,
       startedAt: performance.now(),
       score: 0,
       combo: 0,
       bestCombo: 0,
       hits: 0,
       misses: 0,
-      judgement: "Press the arrow keys when notes reach the glowing line.",
+      judgement: "Press Space or any arrow to start the soundtrack.",
       judgementColor: "#e2e8f0",
       flash: [0, 0, 0, 0],
       shake: 0,
+      audioCtx: null as AudioContext | null,
+      master: null as GainNode | null,
+      nextBeatGame: 0,
+      beatIndex: 0,
     };
 
-    const reset = () => {
+    const ensureAudio = () => {
+      if (state.audioCtx) return state.audioCtx;
+      const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextClass) return null;
+      const audioCtx = new AudioContextClass();
+      const master = audioCtx.createGain();
+      master.gain.value = 0.22;
+      master.connect(audioCtx.destination);
+      state.audioCtx = audioCtx;
+      state.master = master;
+      return audioCtx;
+    };
+
+    const playTone = (frequency: number, start: number, duration: number, type: OscillatorType, volume: number) => {
+      const audioCtx = state.audioCtx;
+      const master = state.master;
+      if (!audioCtx || !master) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(frequency, start);
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(volume, start + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+      osc.connect(gain);
+      gain.connect(master);
+      osc.start(start);
+      osc.stop(start + duration + 0.03);
+    };
+
+    const playNoise = (start: number, duration: number, volume: number) => {
+      const audioCtx = state.audioCtx;
+      const master = state.master;
+      if (!audioCtx || !master) return;
+      const buffer = audioCtx.createBuffer(1, Math.max(1, Math.floor(audioCtx.sampleRate * duration)), audioCtx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i += 1) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+      const source = audioCtx.createBufferSource();
+      const gain = audioCtx.createGain();
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = "highpass";
+      filter.frequency.value = 5200;
+      gain.gain.setValueAtTime(volume, start);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+      source.buffer = buffer;
+      source.connect(filter);
+      filter.connect(gain);
+      gain.connect(master);
+      source.start(start);
+    };
+
+    const soundtrackBpm = (elapsed: number) => Math.min(168, 82 + elapsed * 1.45);
+    const scheduleSoundtrack = (elapsed: number) => {
+      const audioCtx = state.audioCtx;
+      if (!audioCtx || !state.master || !state.started) return;
+      while (state.nextBeatGame < elapsed + 0.35) {
+        const start = audioCtx.currentTime + Math.max(0, state.nextBeatGame - elapsed);
+        const beat = state.beatIndex;
+        const bass = [55, 65.41, 73.42, 49][Math.floor(beat / 8) % 4];
+        if (beat % 4 === 0) {
+          playTone(58, start, 0.16, "sine", 0.75);
+          playTone(bass, start, 0.28, "sawtooth", 0.18);
+        }
+        if (beat % 4 === 2) playNoise(start, 0.12, 0.22);
+        playNoise(start + 0.01, 0.035, beat % 2 === 0 ? 0.06 : 0.04);
+        if (beat % 8 === 0) [261.63, 329.63, 392.0].forEach((freq) => playTone(freq, start + 0.02, 0.42, "triangle", 0.045));
+        if (beat % 8 === 4) [293.66, 349.23, 440.0].forEach((freq) => playTone(freq, start + 0.02, 0.38, "triangle", 0.04));
+        if (elapsed > 18 && beat % 2 === 1) playTone([523.25, 587.33, 659.25, 783.99][beat % 4], start, 0.09, "square", 0.035);
+        state.beatIndex += 1;
+        state.nextBeatGame += 60 / soundtrackBpm(state.nextBeatGame);
+      }
+    };
+
+    const startGame = () => {
+      if (state.started) return;
+      const audioCtx = ensureAudio();
+      void audioCtx?.resume();
+      state.started = true;
+      state.startedAt = performance.now();
+      state.nextBeatGame = 0;
+      state.beatIndex = 0;
+      state.judgement = "Easy intro — single notes first, then faster double notes.";
+      state.judgementColor = "#34d399";
+    };
+
+    const reset = (startNow = false) => {
       state.notes = createChart();
+      state.started = startNow;
       state.startedAt = performance.now();
       state.score = 0;
       state.combo = 0;
       state.bestCombo = 0;
       state.hits = 0;
       state.misses = 0;
-      state.judgement = "Restarted — catch the falling arrows.";
+      state.judgement = startNow ? "Restarted — soundtrack rolling." : "Press Space or any arrow to start the soundtrack.";
       state.judgementColor = "#e2e8f0";
       state.flash = [0, 0, 0, 0];
       state.shake = 0;
+      state.nextBeatGame = 0;
+      state.beatIndex = 0;
+      if (startNow) {
+        const audioCtx = ensureAudio();
+        void audioCtx?.resume();
+      }
     };
 
     const judge = (lane: Lane) => {
+      if (!state.started) return;
       const elapsed = (performance.now() - state.startedAt) / 1000;
       let best: Note | undefined;
       let bestDiff = Infinity;
@@ -133,13 +232,22 @@ export default function RhythmRush() {
       const lane = lanes.findIndex((item) => item.key === event.key);
       if (lane >= 0) {
         event.preventDefault();
+        if (!state.started) {
+          startGame();
+          return;
+        }
         judge(lane as Lane);
+      } else if (event.code === "Space" || event.code === "Enter") {
+        event.preventDefault();
+        startGame();
       } else if (event.code === "KeyR") {
         event.preventDefault();
-        reset();
+        reset(true);
       }
     };
+    const onPointerDown = () => startGame();
     window.addEventListener("keydown", onKeyDown);
+    canvas.addEventListener("pointerdown", onPointerDown);
 
     const resize = () => {
       canvas.width = window.innerWidth * window.devicePixelRatio;
@@ -159,14 +267,15 @@ export default function RhythmRush() {
     };
 
     const tick = () => {
-      const elapsed = (performance.now() - state.startedAt) / 1000;
+      const elapsed = state.started ? (performance.now() - state.startedAt) / 1000 : 0;
+      scheduleSoundtrack(elapsed);
       const w = window.innerWidth;
       const h = window.innerHeight;
       const shakeX = state.shake > 0 ? (Math.random() - 0.5) * state.shake : 0;
       state.shake = Math.max(0, state.shake - 0.8);
 
       for (const note of state.notes) {
-        if (!note.hit && !note.missed && elapsed - note.hitTime > 0.22) {
+        if (state.started && !note.hit && !note.missed && elapsed - note.hitTime > 0.22) {
           note.missed = true;
           state.combo = 0;
           state.misses += 1;
@@ -196,8 +305,8 @@ export default function RhythmRush() {
       const laneW = boardW / 4;
       const topY = 96;
       const hitY = h - 165;
-      const travelTime = 2.05;
-      const speed = (hitY - topY) / travelTime;
+      const previewTravelTime = state.notes.find((note) => !note.hit && !note.missed && note.hitTime >= elapsed)?.travelTime ?? 1.35;
+      const speed = (hitY - topY) / previewTravelTime;
 
       ctx.fillStyle = "rgba(15,23,42,0.74)";
       drawRoundedRect(boardX - 18, 70, boardW + 36, h - 118, 32);
@@ -240,7 +349,8 @@ export default function RhythmRush() {
 
       for (const note of state.notes) {
         if (note.hit || note.missed) continue;
-        const y = hitY - (note.hitTime - elapsed) * speed;
+        const noteSpeed = (hitY - topY) / note.travelTime;
+        const y = hitY - (note.hitTime - elapsed) * noteSpeed;
         if (y < topY - 80 || y > h + 80) continue;
         const x = boardX + note.lane * laneW + laneW / 2;
         ctx.save();
@@ -262,6 +372,21 @@ export default function RhythmRush() {
 
       ctx.restore();
 
+      if (!state.started) {
+        ctx.fillStyle = "rgba(2,6,23,0.72)";
+        ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = "#ffffff";
+        ctx.textAlign = "center";
+        ctx.font = "900 52px Inter, sans-serif";
+        ctx.fillText("Rhythm Rush", w / 2, h / 2 - 68);
+        ctx.font = "900 20px Inter, sans-serif";
+        ctx.fillStyle = "#bae6fd";
+        ctx.fillText("Press SPACE, ENTER, click, or any arrow key to start the soundtrack", w / 2, h / 2 - 18);
+        ctx.font = "700 16px Inter, sans-serif";
+        ctx.fillStyle = "#cbd5e1";
+        ctx.fillText("It begins really easy, then speeds up with double-note hits.", w / 2, h / 2 + 24);
+      }
+
       const totalJudged = state.hits + state.misses;
       const accuracy = totalJudged ? Math.round((state.hits / totalJudged) * 100) : 100;
       if (hudRef.current) {
@@ -279,7 +404,9 @@ export default function RhythmRush() {
     return () => {
       cancelAnimationFrame(frame);
       window.removeEventListener("keydown", onKeyDown);
+      canvas.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("resize", resize);
+      void state.audioCtx?.close();
     };
   }, []);
 
@@ -293,12 +420,12 @@ export default function RhythmRush() {
         <div className="rounded-[1.5rem] border border-cyan-200/20 bg-black/50 px-6 py-4 text-right shadow-2xl backdrop-blur">
           <p className="text-xs font-black uppercase tracking-[0.3em] text-cyan-200">Free Game</p>
           <h1 className="text-3xl font-black">Rhythm Rush</h1>
-          <p className="mt-1 text-sm font-semibold text-slate-300">Press ← ↓ ↑ → as notes hit the gold line</p>
+          <p className="mt-1 text-sm font-semibold text-slate-300">Soundtrack starts easy, then speeds up with double notes</p>
         </div>
       </div>
       <div ref={hudRef} className="pointer-events-none absolute left-6 top-28 z-20 grid w-72 gap-3 rounded-[1.5rem] border border-white/10 bg-black/55 p-5 text-sm shadow-2xl backdrop-blur [&_div]:flex [&_div]:items-center [&_div]:justify-between [&_strong]:text-xl [&_strong]:font-black" />
       <div ref={messageRef} className="pointer-events-none absolute bottom-24 left-1/2 z-20 -translate-x-1/2 rounded-full border border-white/10 bg-black/55 px-8 py-4 text-3xl font-black uppercase tracking-[0.2em] shadow-2xl backdrop-blur">Ready</div>
-      <div className="pointer-events-none absolute bottom-6 right-6 z-20 rounded-full border border-white/10 bg-black/45 px-5 py-3 text-xs font-black uppercase tracking-[0.18em] text-slate-300 backdrop-blur">R Restart</div>
+      <div className="pointer-events-none absolute bottom-6 right-6 z-20 rounded-full border border-white/10 bg-black/45 px-5 py-3 text-xs font-black uppercase tracking-[0.18em] text-slate-300 backdrop-blur">Space Start • R Restart</div>
     </main>
   );
 }
