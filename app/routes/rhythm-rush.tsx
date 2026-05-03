@@ -27,13 +27,13 @@ function createChart() {
   const add = (lane: Lane, hitTime: number, travelTime: number, holdTime = 0) => notes.push({ lane, hitTime, holdTime, travelTime, hit: false, missed: false, completed: false, holding: false });
   const addChord = (chord: Lane[], hitTime: number, travelTime: number, holdTime = 0) => chord.forEach((lane) => add(lane, hitTime, travelTime, holdTime));
   const sections: Array<{ interval: number; travel: number; pattern: ChartItem[]; repeats: number; rest: number }> = [
-    { interval: 0.82, travel: 2.55, pattern: [0, 1, 2, 3], repeats: 2, rest: 0.75 },
-    { interval: 0.68, travel: 2.35, pattern: [0, 1, 2, 3, 3, 2, 1, 0], repeats: 2, rest: 0.55 },
-    { interval: 0.56, travel: 2.12, pattern: [0, { lane: 2, hold: 0.9 }, 1, 3, { lane: 1, hold: 1.05 }, 2, 0, 3], repeats: 2, rest: 0.45 },
-    { interval: 0.48, travel: 1.92, pattern: [0, 1, { chord: [2, 3] }, { lane: 2, hold: 0.8 }, 3, 1, { chord: [0, 2] }, { lane: 3, hold: 1.15 }], repeats: 2, rest: 0.38 },
-    { interval: 0.40, travel: 1.72, pattern: [0, { chord: [1, 3] }, { lane: 2, hold: 0.72 }, 0, 3, { chord: [0, 2], hold: 0.58 }, 1, 3], repeats: 3, rest: 0.32 },
-    { interval: 0.34, travel: 1.52, pattern: [{ chord: [0, 3] }, 1, { lane: 2, hold: 0.64 }, { chord: [0, 2] }, 3, 1, { chord: [1, 3], hold: 0.7 }, 0], repeats: 3, rest: 0.24 },
-    { interval: 0.29, travel: 1.34, pattern: [0, { lane: 1, hold: 0.52 }, { chord: [2, 3] }, 2, { chord: [0, 1], hold: 0.48 }, 3, 2, { chord: [0, 3] }, { lane: 1, hold: 0.62 }, 2], repeats: 4, rest: 0.18 },
+    { interval: 1.05, travel: 3.0, pattern: [0, 1, 2, 3], repeats: 2, rest: 0.9 },
+    { interval: 0.88, travel: 2.8, pattern: [0, 1, 2, 3, 3, 2, 1, 0], repeats: 1, rest: 0.8 },
+    { interval: 0.74, travel: 2.55, pattern: [0, 2, { lane: 1, hold: 1.0 }, 3, 1, 2, 0, 3], repeats: 2, rest: 0.65 },
+    { interval: 0.64, travel: 2.35, pattern: [0, 1, { chord: [2, 3] }, 2, 3, { lane: 1, hold: 1.15 }, 0, 3], repeats: 2, rest: 0.55 },
+    { interval: 0.56, travel: 2.15, pattern: [0, { chord: [1, 3] }, 2, 0, { lane: 3, hold: 0.95 }, 1, { chord: [0, 2] }, 3], repeats: 2, rest: 0.45 },
+    { interval: 0.48, travel: 1.95, pattern: [{ chord: [0, 3] }, 1, 2, { lane: 0, hold: 0.82 }, 3, 1, { chord: [1, 3] }, 0], repeats: 2, rest: 0.35 },
+    { interval: 0.42, travel: 1.78, pattern: [0, 1, { chord: [2, 3] }, 2, { lane: 1, hold: 0.72 }, 3, 2, { chord: [0, 3] }, 1, 2], repeats: 2, rest: 0.3 },
   ];
 
   for (const section of sections) {
@@ -89,7 +89,7 @@ export default function RhythmRush() {
       if (!AudioContextClass) return null;
       const audioCtx = new AudioContextClass();
       const master = audioCtx.createGain();
-      master.gain.value = 0.22;
+      master.gain.value = 0.34;
       master.connect(audioCtx.destination);
       state.audioCtx = audioCtx;
       state.master = master;
@@ -134,7 +134,7 @@ export default function RhythmRush() {
       source.start(start);
     };
 
-    const soundtrackBpm = (elapsed: number) => Math.min(168, 82 + elapsed * 1.45);
+    const soundtrackBpm = (elapsed: number) => Math.min(142, 78 + elapsed * 0.95);
     const scheduleSoundtrack = (elapsed: number) => {
       const audioCtx = state.audioCtx;
       if (!audioCtx || !state.master || !state.started) return;
@@ -143,14 +143,14 @@ export default function RhythmRush() {
         const beat = state.beatIndex;
         const bass = [55, 65.41, 73.42, 49][Math.floor(beat / 8) % 4];
         if (beat % 4 === 0) {
-          playTone(58, start, 0.16, "sine", 0.75);
-          playTone(bass, start, 0.28, "sawtooth", 0.18);
+          playTone(58, start, 0.16, "sine", 0.62);
+          playTone(bass, start, 0.34, "sawtooth", 0.24);
         }
-        if (beat % 4 === 2) playNoise(start, 0.12, 0.22);
-        playNoise(start + 0.01, 0.035, beat % 2 === 0 ? 0.06 : 0.04);
-        if (beat % 8 === 0) [261.63, 329.63, 392.0].forEach((freq) => playTone(freq, start + 0.02, 0.42, "triangle", 0.045));
-        if (beat % 8 === 4) [293.66, 349.23, 440.0].forEach((freq) => playTone(freq, start + 0.02, 0.38, "triangle", 0.04));
-        if (elapsed > 18 && beat % 2 === 1) playTone([523.25, 587.33, 659.25, 783.99][beat % 4], start, 0.09, "square", 0.035);
+        if (beat % 4 === 2) playNoise(start, 0.12, 0.16);
+        playNoise(start + 0.01, 0.035, beat % 2 === 0 ? 0.04 : 0.028);
+        if (beat % 8 === 0) [261.63, 329.63, 392.0].forEach((freq) => playTone(freq, start + 0.02, 0.85, "triangle", 0.075));
+        if (beat % 8 === 4) [293.66, 349.23, 440.0].forEach((freq) => playTone(freq, start + 0.02, 0.78, "triangle", 0.068));
+        if (elapsed > 18 && beat % 2 === 1) playTone([523.25, 587.33, 659.25, 783.99][beat % 4], start, 0.12, "square", 0.05);
         state.beatIndex += 1;
         state.nextBeatGame += 60 / soundtrackBpm(state.nextBeatGame);
       }
@@ -161,14 +161,14 @@ export default function RhythmRush() {
         [659.25, 783.99, 1046.5, 1174.66],
         [523.25, 659.25, 783.99, 1046.5],
       ];
-      while (state.nextNoteSoundIndex < state.notes.length && state.notes[state.nextNoteSoundIndex].hitTime < elapsed + 0.55) {
+      while (state.nextNoteSoundIndex < state.notes.length && state.notes[state.nextNoteSoundIndex].hitTime < elapsed + 1.1) {
         const note = state.notes[state.nextNoteSoundIndex];
         const start = audioCtx.currentTime + Math.max(0, note.hitTime - elapsed);
         const pack = melodyPacks[Math.floor(note.hitTime / 8) % melodyPacks.length];
         const frequency = pack[note.lane];
         const duration = note.holdTime > 0 ? Math.min(note.holdTime + 0.08, 1.5) : 0.14;
-        playTone(frequency, start, duration, note.holdTime > 0 ? "sawtooth" : "square", note.holdTime > 0 ? 0.07 : 0.052);
-        playTone(frequency * 2, start + 0.01, Math.min(duration, 0.42), "triangle", note.holdTime > 0 ? 0.025 : 0.018);
+        playTone(frequency, start, duration, note.holdTime > 0 ? "sawtooth" : "square", note.holdTime > 0 ? 0.13 : 0.105);
+        playTone(frequency * 2, start + 0.01, Math.min(duration, 0.55), "triangle", note.holdTime > 0 ? 0.052 : 0.038);
         state.nextNoteSoundIndex += 1;
       }
     };
@@ -182,7 +182,7 @@ export default function RhythmRush() {
       state.nextBeatGame = 0;
       state.nextNoteSoundIndex = 0;
       state.beatIndex = 0;
-      state.judgement = "Easy intro — original butterfly-style melody follows every note.";
+      state.judgement = "Easier mode — the original butterfly-style soundtrack leads the notes.";
       state.judgementColor = "#34d399";
     };
 
@@ -249,7 +249,7 @@ export default function RhythmRush() {
         }
       }
 
-      if (!best || bestDiff > 0.19) {
+      if (!best || bestDiff > 0.28) {
         state.combo = 0;
         state.misses += 1;
         state.judgement = "MISS";
@@ -272,11 +272,11 @@ export default function RhythmRush() {
         best.completed = true;
       }
 
-      if (bestDiff <= 0.055) {
+      if (bestDiff <= 0.085) {
         state.score += Math.round((isHold ? 620 : 1000) + state.combo * 12);
         state.judgement = isHold ? "PERFECT HOLD — KEEP HOLDING" : "PERFECT";
         state.judgementColor = "#facc15";
-      } else if (bestDiff <= 0.11) {
+      } else if (bestDiff <= 0.17) {
         state.score += Math.round((isHold ? 470 : 700) + state.combo * 8);
         state.judgement = isHold ? "GREAT HOLD — KEEP HOLDING" : "GREAT";
         state.judgementColor = "#34d399";
@@ -312,7 +312,7 @@ export default function RhythmRush() {
       const elapsed = state.started ? (performance.now() - state.startedAt) / 1000 : 0;
       const hold = state.notes.find((note) => note.lane === lane && note.holding && !note.completed && !note.missed);
       if (!hold) return;
-      if (elapsed < hold.hitTime + hold.holdTime - 0.12) dropHold(hold);
+      if (elapsed < hold.hitTime + hold.holdTime - 0.24) dropHold(hold);
       else completeHold(hold);
     };
     const onPointerDown = () => startGame();
@@ -347,7 +347,7 @@ export default function RhythmRush() {
 
       for (const note of state.notes) {
         if (!state.started || note.completed || note.missed) continue;
-        if (!note.hit && elapsed - note.hitTime > 0.22) {
+        if (!note.hit && elapsed - note.hitTime > 0.34) {
           note.missed = true;
           note.completed = true;
           state.combo = 0;
@@ -476,7 +476,7 @@ export default function RhythmRush() {
         ctx.fillText("Press SPACE, ENTER, click, or any arrow key to start the soundtrack", w / 2, h / 2 - 18);
         ctx.font = "700 16px Inter, sans-serif";
         ctx.fillStyle = "#cbd5e1";
-        ctx.fillText("It begins really easy, then adds faster notes, double hits, and hold notes.", w / 2, h / 2 + 24);
+        ctx.fillText("Easier timing. The music leads, and the notes follow the soundtrack.", w / 2, h / 2 + 24);
       }
 
       const totalJudged = state.hits + state.misses;
@@ -513,7 +513,7 @@ export default function RhythmRush() {
         <div className="rounded-[1.5rem] border border-cyan-200/20 bg-black/50 px-6 py-4 text-right shadow-2xl backdrop-blur">
           <p className="text-xs font-black uppercase tracking-[0.3em] text-cyan-200">Free Game</p>
           <h1 className="text-3xl font-black">Rhythm Rush</h1>
-          <p className="mt-1 text-sm font-semibold text-slate-300">Original butterfly-style music matches the notes</p>
+          <p className="mt-1 text-sm font-semibold text-slate-300">Easier chart with soundtrack-led notes</p>
         </div>
       </div>
       <div ref={hudRef} className="pointer-events-none absolute left-6 top-28 z-20 grid w-72 gap-3 rounded-[1.5rem] border border-white/10 bg-black/55 p-5 text-sm shadow-2xl backdrop-blur [&_div]:flex [&_div]:items-center [&_div]:justify-between [&_strong]:text-xl [&_strong]:font-black" />
