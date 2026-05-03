@@ -1,5 +1,5 @@
 import { Link } from "react-router";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 
 import type { Route } from "./+types/rhythm-rush";
 
@@ -55,10 +55,28 @@ export default function RhythmRush() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const hudRef = useRef<HTMLDivElement | null>(null);
   const messageRef = useRef<HTMLDivElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [songName, setSongName] = useState("Original butterfly-style soundtrack");
+
+  const chooseCustomSong = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    const audio = audioRef.current;
+    if (!file || !audio) return;
+    const oldUrl = audio.dataset.objectUrl;
+    if (oldUrl) URL.revokeObjectURL(oldUrl);
+    const url = URL.createObjectURL(file);
+    audio.src = url;
+    audio.dataset.objectUrl = url;
+    audio.dataset.customSong = "yes";
+    audio.volume = 0.72;
+    setSongName(file.name);
+  };
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    const audio = audioRef.current;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
@@ -82,6 +100,9 @@ export default function RhythmRush() {
       nextNoteSoundIndex: 0,
       beatIndex: 0,
     };
+
+    const hasCustomSong = () => Boolean(audio?.dataset.customSong === "yes" && audio.src);
+    const currentGameTime = () => hasCustomSong() && audio ? audio.currentTime : (performance.now() - state.startedAt) / 1000;
 
     const ensureAudio = () => {
       if (state.audioCtx) return state.audioCtx;
@@ -136,6 +157,7 @@ export default function RhythmRush() {
 
     const soundtrackBpm = (elapsed: number) => Math.min(142, 78 + elapsed * 0.95);
     const scheduleSoundtrack = (elapsed: number) => {
+      if (hasCustomSong()) return;
       const audioCtx = state.audioCtx;
       if (!audioCtx || !state.master || !state.started) return;
       while (state.nextBeatGame < elapsed + 0.35) {
@@ -179,6 +201,10 @@ export default function RhythmRush() {
       void audioCtx?.resume();
       state.started = true;
       state.startedAt = performance.now();
+      if (hasCustomSong() && audio) {
+        audio.currentTime = 0;
+        void audio.play();
+      }
       state.nextBeatGame = 0;
       state.nextNoteSoundIndex = 0;
       state.beatIndex = 0;
@@ -206,7 +232,11 @@ export default function RhythmRush() {
       if (startNow) {
         const audioCtx = ensureAudio();
         void audioCtx?.resume();
-      }
+        if (hasCustomSong() && audio) {
+          audio.currentTime = 0;
+          void audio.play();
+        }
+      } else if (audio) audio.pause();
     };
 
     const completeHold = (note: Note) => {
@@ -237,7 +267,7 @@ export default function RhythmRush() {
 
     const judge = (lane: Lane) => {
       if (!state.started) return;
-      const elapsed = (performance.now() - state.startedAt) / 1000;
+      const elapsed = currentGameTime();
       let best: Note | undefined;
       let bestDiff = Infinity;
       for (const note of state.notes) {
@@ -309,7 +339,7 @@ export default function RhythmRush() {
       const lane = lanes.findIndex((item) => item.key === event.key);
       if (lane < 0) return;
       state.held[lane] = false;
-      const elapsed = state.started ? (performance.now() - state.startedAt) / 1000 : 0;
+      const elapsed = state.started ? currentGameTime() : 0;
       const hold = state.notes.find((note) => note.lane === lane && note.holding && !note.completed && !note.missed);
       if (!hold) return;
       if (elapsed < hold.hitTime + hold.holdTime - 0.24) dropHold(hold);
@@ -338,7 +368,7 @@ export default function RhythmRush() {
     };
 
     const tick = () => {
-      const elapsed = state.started ? (performance.now() - state.startedAt) / 1000 : 0;
+      const elapsed = state.started ? currentGameTime() : 0;
       scheduleSoundtrack(elapsed);
       const w = window.innerWidth;
       const h = window.innerHeight;
@@ -499,6 +529,11 @@ export default function RhythmRush() {
       window.removeEventListener("keyup", onKeyUp);
       canvas.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("resize", resize);
+      if (audio) {
+        audio.pause();
+        const objectUrl = audio.dataset.objectUrl;
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+      }
       void state.audioCtx?.close();
     };
   }, []);
@@ -506,14 +541,18 @@ export default function RhythmRush() {
   return (
     <main className="relative min-h-screen overflow-hidden bg-slate-950 text-white">
       <canvas ref={canvasRef} className="absolute inset-0" />
+      <audio ref={audioRef} preload="auto" />
+      <input accept="audio/*" className="hidden" onChange={chooseCustomSong} ref={fileInputRef} type="file" />
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between p-6">
-        <div className="pointer-events-auto flex gap-3">
+        <div className="pointer-events-auto flex flex-wrap gap-3">
           <Link className="rounded-full border border-white/10 bg-black/45 px-5 py-3 text-sm font-black uppercase tracking-[0.2em] backdrop-blur transition hover:bg-white/10" to="/">← Lobby</Link>
+          <button className="rounded-full border border-cyan-200/20 bg-cyan-300/15 px-5 py-3 text-sm font-black uppercase tracking-[0.18em] text-cyan-100 backdrop-blur transition hover:bg-cyan-300/25" onClick={() => fileInputRef.current?.click()} type="button">Use My Song</button>
         </div>
         <div className="rounded-[1.5rem] border border-cyan-200/20 bg-black/50 px-6 py-4 text-right shadow-2xl backdrop-blur">
           <p className="text-xs font-black uppercase tracking-[0.3em] text-cyan-200">Free Game</p>
           <h1 className="text-3xl font-black">Rhythm Rush</h1>
           <p className="mt-1 text-sm font-semibold text-slate-300">Easier chart with soundtrack-led notes</p>
+          <p className="mt-2 max-w-sm truncate text-xs font-bold text-cyan-100/80">Song: {songName}</p>
         </div>
       </div>
       <div ref={hudRef} className="pointer-events-none absolute left-6 top-28 z-20 grid w-72 gap-3 rounded-[1.5rem] border border-white/10 bg-black/55 p-5 text-sm shadow-2xl backdrop-blur [&_div]:flex [&_div]:items-center [&_div]:justify-between [&_strong]:text-xl [&_strong]:font-black" />
