@@ -79,6 +79,7 @@ export default function RhythmRush() {
       audioCtx: null as AudioContext | null,
       master: null as GainNode | null,
       nextBeatGame: 0,
+      nextNoteSoundIndex: 0,
       beatIndex: 0,
     };
 
@@ -153,6 +154,23 @@ export default function RhythmRush() {
         state.beatIndex += 1;
         state.nextBeatGame += 60 / soundtrackBpm(state.nextBeatGame);
       }
+
+      const melodyPacks = [
+        [659.25, 783.99, 880.0, 987.77],
+        [587.33, 739.99, 830.61, 987.77],
+        [659.25, 783.99, 1046.5, 1174.66],
+        [523.25, 659.25, 783.99, 1046.5],
+      ];
+      while (state.nextNoteSoundIndex < state.notes.length && state.notes[state.nextNoteSoundIndex].hitTime < elapsed + 0.55) {
+        const note = state.notes[state.nextNoteSoundIndex];
+        const start = audioCtx.currentTime + Math.max(0, note.hitTime - elapsed);
+        const pack = melodyPacks[Math.floor(note.hitTime / 8) % melodyPacks.length];
+        const frequency = pack[note.lane];
+        const duration = note.holdTime > 0 ? Math.min(note.holdTime + 0.08, 1.5) : 0.14;
+        playTone(frequency, start, duration, note.holdTime > 0 ? "sawtooth" : "square", note.holdTime > 0 ? 0.07 : 0.052);
+        playTone(frequency * 2, start + 0.01, Math.min(duration, 0.42), "triangle", note.holdTime > 0 ? 0.025 : 0.018);
+        state.nextNoteSoundIndex += 1;
+      }
     };
 
     const startGame = () => {
@@ -162,8 +180,9 @@ export default function RhythmRush() {
       state.started = true;
       state.startedAt = performance.now();
       state.nextBeatGame = 0;
+      state.nextNoteSoundIndex = 0;
       state.beatIndex = 0;
-      state.judgement = "Easy intro — single notes first, then faster double notes.";
+      state.judgement = "Easy intro — original butterfly-style melody follows every note.";
       state.judgementColor = "#34d399";
     };
 
@@ -182,6 +201,7 @@ export default function RhythmRush() {
       state.held = [false, false, false, false];
       state.shake = 0;
       state.nextBeatGame = 0;
+      state.nextNoteSoundIndex = 0;
       state.beatIndex = 0;
       if (startNow) {
         const audioCtx = ensureAudio();
@@ -493,7 +513,7 @@ export default function RhythmRush() {
         <div className="rounded-[1.5rem] border border-cyan-200/20 bg-black/50 px-6 py-4 text-right shadow-2xl backdrop-blur">
           <p className="text-xs font-black uppercase tracking-[0.3em] text-cyan-200">Free Game</p>
           <h1 className="text-3xl font-black">Rhythm Rush</h1>
-          <p className="mt-1 text-sm font-semibold text-slate-300">Tap arrows, or hold long notes until the tail ends</p>
+          <p className="mt-1 text-sm font-semibold text-slate-300">Original butterfly-style music matches the notes</p>
         </div>
       </div>
       <div ref={hudRef} className="pointer-events-none absolute left-6 top-28 z-20 grid w-72 gap-3 rounded-[1.5rem] border border-white/10 bg-black/55 p-5 text-sm shadow-2xl backdrop-blur [&_div]:flex [&_div]:items-center [&_div]:justify-between [&_strong]:text-xl [&_strong]:font-black" />
