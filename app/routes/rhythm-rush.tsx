@@ -69,6 +69,7 @@ export default function RhythmRush() {
     audio.src = url;
     audio.dataset.objectUrl = url;
     audio.dataset.customSong = "yes";
+    audio.loop = true;
     audio.volume = 0.72;
     setSongName(file.name);
   };
@@ -89,6 +90,7 @@ export default function RhythmRush() {
       bestCombo: 0,
       hits: 0,
       misses: 0,
+      gameOver: false,
       judgement: "Press Space or any arrow to start the soundtrack.",
       judgementColor: "#e2e8f0",
       flash: [0, 0, 0, 0],
@@ -102,7 +104,7 @@ export default function RhythmRush() {
     };
 
     const hasCustomSong = () => Boolean(audio?.dataset.customSong === "yes" && audio.src);
-    const currentGameTime = () => hasCustomSong() && audio ? audio.currentTime : (performance.now() - state.startedAt) / 1000;
+    const currentGameTime = () => (performance.now() - state.startedAt) / 1000;
 
     const ensureAudio = () => {
       if (state.audioCtx) return state.audioCtx;
@@ -159,7 +161,7 @@ export default function RhythmRush() {
     const scheduleSoundtrack = (elapsed: number) => {
       if (hasCustomSong()) return;
       const audioCtx = state.audioCtx;
-      if (!audioCtx || !state.master || !state.started) return;
+      if (!audioCtx || !state.master || !state.started || state.gameOver) return;
       while (state.nextBeatGame < elapsed + 0.35) {
         const start = audioCtx.currentTime + Math.max(0, state.nextBeatGame - elapsed);
         const beat = state.beatIndex;
@@ -221,6 +223,7 @@ export default function RhythmRush() {
       state.bestCombo = 0;
       state.hits = 0;
       state.misses = 0;
+      state.gameOver = false;
       state.judgement = startNow ? "Restarted — soundtrack rolling." : "Press Space or any arrow to start the soundtrack.";
       state.judgementColor = "#e2e8f0";
       state.flash = [0, 0, 0, 0];
@@ -239,8 +242,27 @@ export default function RhythmRush() {
       } else if (audio) audio.pause();
     };
 
+    const triggerGameOver = () => {
+      state.gameOver = true;
+      state.combo = 0;
+      state.judgement = "GAME OVER — 5 mistakes. Press R to restart.";
+      state.judgementColor = "#fb7185";
+      state.shake = 22;
+      if (audio) audio.pause();
+    };
+
+    const registerMistake = (message: string) => {
+      if (state.gameOver) return;
+      state.combo = 0;
+      state.misses += 1;
+      state.judgement = state.misses >= 5 ? "GAME OVER — 5 mistakes. Press R to restart." : message;
+      state.judgementColor = "#fb7185";
+      state.shake = 12;
+      if (state.misses >= 5) triggerGameOver();
+    };
+
     const completeHold = (note: Note) => {
-      if (note.completed || note.missed) return;
+      if (note.completed || note.missed || state.gameOver) return;
       note.completed = true;
       note.holding = false;
       state.held[note.lane] = false;
@@ -258,15 +280,11 @@ export default function RhythmRush() {
       note.completed = true;
       note.holding = false;
       state.held[note.lane] = false;
-      state.combo = 0;
-      state.misses += 1;
-      state.judgement = "HOLD DROPPED";
-      state.judgementColor = "#fb7185";
-      state.shake = 14;
+      registerMistake("HOLD DROPPED");
     };
 
     const judge = (lane: Lane) => {
-      if (!state.started) return;
+      if (!state.started || state.gameOver) return;
       const elapsed = currentGameTime();
       let best: Note | undefined;
       let bestDiff = Infinity;
@@ -280,11 +298,7 @@ export default function RhythmRush() {
       }
 
       if (!best || bestDiff > 0.28) {
-        state.combo = 0;
-        state.misses += 1;
-        state.judgement = "MISS";
-        state.judgementColor = "#fb7185";
-        state.shake = 12;
+        registerMistake("MISS");
         return;
       }
 
@@ -375,15 +389,22 @@ export default function RhythmRush() {
       const shakeX = state.shake > 0 ? (Math.random() - 0.5) * state.shake : 0;
       state.shake = Math.max(0, state.shake - 0.8);
 
+      if (state.started && !state.gameOver) {
+        const lastNoteEnd = state.notes.reduce((latest, note) => Math.max(latest, note.hitTime + note.holdTime), 0);
+        if (lastNoteEnd - elapsed < 12) {
+          const offset = lastNoteEnd + 1.5;
+          state.notes.push(...createChart().map((note) => ({ ...note, hitTime: note.hitTime + offset })));
+          state.judgement = "Endless mode — keep going until 5 mistakes.";
+          state.judgementColor = "#bae6fd";
+        }
+      }
+
       for (const note of state.notes) {
-        if (!state.started || note.completed || note.missed) continue;
+        if (!state.started || state.gameOver || note.completed || note.missed) continue;
         if (!note.hit && elapsed - note.hitTime > 0.34) {
           note.missed = true;
           note.completed = true;
-          state.combo = 0;
-          state.misses += 1;
-          state.judgement = note.holdTime > 0 ? "MISSED HOLD" : "MISS";
-          state.judgementColor = "#fb7185";
+          registerMistake(note.holdTime > 0 ? "MISSED HOLD" : "MISS");
         } else if (note.holding && elapsed >= note.hitTime + note.holdTime) {
           completeHold(note);
         }
@@ -494,25 +515,25 @@ export default function RhythmRush() {
 
       ctx.restore();
 
-      if (!state.started) {
+      if (!state.started || state.gameOver) {
         ctx.fillStyle = "rgba(2,6,23,0.72)";
         ctx.fillRect(0, 0, w, h);
         ctx.fillStyle = "#ffffff";
         ctx.textAlign = "center";
         ctx.font = "900 52px Inter, sans-serif";
-        ctx.fillText("Rhythm Rush", w / 2, h / 2 - 68);
+        ctx.fillText(state.gameOver ? "Game Over" : "Rhythm Rush", w / 2, h / 2 - 68);
         ctx.font = "900 20px Inter, sans-serif";
-        ctx.fillStyle = "#bae6fd";
-        ctx.fillText("Press SPACE, ENTER, click, or any arrow key to start the soundtrack", w / 2, h / 2 - 18);
+        ctx.fillStyle = state.gameOver ? "#fecaca" : "#bae6fd";
+        ctx.fillText(state.gameOver ? "You made 5 mistakes. Press R to restart." : "Press SPACE, ENTER, click, or any arrow key to start the soundtrack", w / 2, h / 2 - 18);
         ctx.font = "700 16px Inter, sans-serif";
         ctx.fillStyle = "#cbd5e1";
-        ctx.fillText("Easier timing. The music leads, and the notes follow the soundtrack.", w / 2, h / 2 + 24);
+        ctx.fillText(state.gameOver ? "Endless mode only stops when mistakes reach 5." : "Easier timing. The music leads, and the notes follow the soundtrack.", w / 2, h / 2 + 24);
       }
 
       const totalJudged = state.hits + state.misses;
       const accuracy = totalJudged ? Math.round((state.hits / totalJudged) * 100) : 100;
       if (hudRef.current) {
-        hudRef.current.innerHTML = `<div><span class="text-slate-400">Score</span><strong>${state.score.toLocaleString()}</strong></div><div><span class="text-slate-400">Combo</span><strong>${state.combo}</strong></div><div><span class="text-slate-400">Best</span><strong>${state.bestCombo}</strong></div><div><span class="text-slate-400">Accuracy</span><strong>${accuracy}%</strong></div>`;
+        hudRef.current.innerHTML = `<div><span class="text-slate-400">Score</span><strong>${state.score.toLocaleString()}</strong></div><div><span class="text-slate-400">Combo</span><strong>${state.combo}</strong></div><div><span class="text-slate-400">Best</span><strong>${state.bestCombo}</strong></div><div><span class="text-slate-400">Accuracy</span><strong>${accuracy}%</strong></div><div><span class="text-slate-400">Mistakes</span><strong>${state.misses}/5</strong></div>`;
       }
       if (messageRef.current) {
         messageRef.current.textContent = state.judgement;
