@@ -49,6 +49,13 @@ const games: Game[] = [
     icon: "3B",
     href: "/three-body-survival",
   },
+  {
+    title: "Rhythm Rush",
+    description: "Hit falling arrow notes on the beat with polished lanes, combos, and accuracy scoring.",
+    accent: "from-pink-300 to-cyan-400",
+    icon: "RR",
+    href: "/rhythm-rush",
+  },
 ];
 
 const gameCardClass =
@@ -171,7 +178,7 @@ export default function Home() {
               </div>
 
               <div className="mt-6 rounded-3xl bg-slate-950/60 p-5">
-                <div className="mb-4 flex items-center justify-between">
+                <div className="mb-4flex items-center justify-between">
                   <span className="text-sm font-semibold text-slate-300">
                     Next Match
                   </span>
@@ -187,7 +194,7 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="mt-16 grid gap-5 md:grid-cols-2 xl:grid-cols-4" id="games">
+        <div className="mt-16 grid gap-5 md:grid-cols-2 xl:grid-cols-5" id="games">
           {games.map((game) => (
             <GameCard game={game} key={game.title} />
           ))}

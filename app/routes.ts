@@ -7,4 +7,5 @@ export default [
   route("super-mario", "routes/super-mario.tsx"),
   route("sky-ace-infinite", "routes/sky-ace-infinite.tsx"),
   route("three-body-survival", "routes/three-body-survival.tsx"),
+  route("rhythm-rush", "routes/rhythm-rush.tsx"),
 ] satisfies RouteConfig;
