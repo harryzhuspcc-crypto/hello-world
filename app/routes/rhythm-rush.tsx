@@ -12,6 +12,7 @@ export function meta({}: Route.MetaArgs) {
 
 type Lane = 0 | 1 | 2 | 3;
 type Note = { lane: Lane; hitTime: number; holdTime: number; hit: boolean; missed: boolean; completed: boolean; holding: boolean; travelTime: number };
+type ChartItem = Lane | Lane[] | { lane: Lane; hold: number } | { chord: Lane[]; hold?: number };
 
 const lanes = [
   { key: "ArrowLeft", label: "←", name: "LEFT", color: "#38bdf8" },
@@ -23,7 +24,6 @@ const lanes = [
 function createChart() {
   const notes: Note[] = [];
   let time = 1.25;
-  type ChartItem = Lane | Lane[] | { lane: Lane; hold: number } | { chord: Lane[]; hold?: number };
   const add = (lane: Lane, hitTime: number, travelTime: number, holdTime = 0) => notes.push({ lane, hitTime, holdTime, travelTime, hit: false, missed: false, completed: false, holding: false });
   const addChord = (chord: Lane[], hitTime: number, travelTime: number, holdTime = 0) => chord.forEach((lane) => add(lane, hitTime, travelTime, holdTime));
   const sections: Array<{ interval: number; travel: number; pattern: ChartItem[]; repeats: number; rest: number }> = [
@@ -47,6 +47,33 @@ function createChart() {
       }
       time += section.rest;
     }
+  }
+  return notes;
+}
+
+function createHardEndlessChunk(startTime: number, loop: number) {
+  const notes: Note[] = [];
+  let time = startTime;
+  const interval = Math.max(0.26, 0.42 - loop * 0.018);
+  const travel = Math.max(1.18, 1.78 - loop * 0.055);
+  const add = (lane: Lane, hitTime: number, holdTime = 0) => notes.push({ lane, hitTime, holdTime, travelTime: travel, hit: false, missed: false, completed: false, holding: false });
+  const addItem = (item: ChartItem) => {
+    if (Array.isArray(item)) item.forEach((lane) => add(lane, time));
+    else if (typeof item === "object" && "chord" in item) item.chord.forEach((lane) => add(lane, time, item.hold ?? 0));
+    else if (typeof item === "object") add(item.lane, time, item.hold);
+    else add(item, time);
+    time += interval;
+  };
+  const hardPatterns: ChartItem[][] = [
+    [0, 1, { chord: [2, 3] }, 2, { lane: 1, hold: 0.72 }, 3, 2, { chord: [0, 3] }, 1, 2],
+    [{ chord: [0, 3] }, 1, 2, { lane: 0, hold: 0.82 }, 3, 1, { chord: [1, 3] }, 0, 2, { chord: [0, 2] }],
+    [0, { chord: [1, 3] }, 2, { chord: [0, 2] }, 3, { lane: 2, hold: 0.64 }, 1, { chord: [0, 3] }, 2, 1],
+  ];
+  const repeats = Math.min(5, 3 + Math.floor(loop / 2));
+  for (let repeat = 0; repeat < repeats; repeat += 1) {
+    const pattern = hardPatterns[(loop + repeat) % hardPatterns.length];
+    for (const item of pattern) addItem(item);
+    time += Math.max(0.12, 0.3 - loop * 0.018);
   }
   return notes;
 }
@@ -101,6 +128,7 @@ export default function RhythmRush() {
       nextBeatGame: 0,
       nextNoteSoundIndex: 0,
       beatIndex: 0,
+      endlessLoops: 0,
     };
 
     const hasCustomSong = () => Boolean(audio?.dataset.customSong === "yes" && audio.src);
@@ -210,7 +238,8 @@ export default function RhythmRush() {
       state.nextBeatGame = 0;
       state.nextNoteSoundIndex = 0;
       state.beatIndex = 0;
-      state.judgement = "Easier mode — the original butterfly-style soundtrack leads the notes.";
+      state.endlessLoops = 0;
+      state.judgement = "Easier intro — it only gets faster, then stays hard.";
       state.judgementColor = "#34d399";
     };
 
@@ -232,6 +261,7 @@ export default function RhythmRush() {
       state.nextBeatGame = 0;
       state.nextNoteSoundIndex = 0;
       state.beatIndex = 0;
+      state.endlessLoops = 0;
       if (startNow) {
         const audioCtx = ensureAudio();
         void audioCtx?.resume();
@@ -392,9 +422,10 @@ export default function RhythmRush() {
       if (state.started && !state.gameOver) {
         const lastNoteEnd = state.notes.reduce((latest, note) => Math.max(latest, note.hitTime + note.holdTime), 0);
         if (lastNoteEnd - elapsed < 12) {
-          const offset = lastNoteEnd + 1.5;
-          state.notes.push(...createChart().map((note) => ({ ...note, hitTime: note.hitTime + offset })));
-          state.judgement = "Endless mode — keep going until 5 mistakes.";
+          const offset = lastNoteEnd + 1.0;
+          state.notes.push(...createHardEndlessChunk(offset, state.endlessLoops));
+          state.endlessLoops += 1;
+          state.judgement = state.endlessLoops < 5 ? "Endless mode — faster hard notes added." : "Max speed reached — it stays hard forever.";
           state.judgementColor = "#bae6fd";
         }
       }
@@ -527,7 +558,7 @@ export default function RhythmRush() {
         ctx.fillText(state.gameOver ? "You made 5 mistakes. Press R to restart." : "Press SPACE, ENTER, click, or any arrow key to start the soundtrack", w / 2, h / 2 - 18);
         ctx.font = "700 16px Inter, sans-serif";
         ctx.fillStyle = "#cbd5e1";
-        ctx.fillText(state.gameOver ? "Endless mode only stops when mistakes reach 5." : "Easier timing. The music leads, and the notes follow the soundtrack.", w / 2, h / 2 + 24);
+        ctx.fillText(state.gameOver ? "Endless mode only stops when mistakes reach 5." : "It starts easy, only gets faster, and stays hard after the ramp.", w / 2, h / 2 + 24);
       }
 
       const totalJudged = state.hits + state.misses;
@@ -572,7 +603,7 @@ export default function RhythmRush() {
         <div className="rounded-[1.5rem] border border-cyan-200/20 bg-black/50 px-6 py-4 text-right shadow-2xl backdrop-blur">
           <p className="text-xs font-black uppercase tracking-[0.3em] text-cyan-200">Free Game</p>
           <h1 className="text-3xl font-black">Rhythm Rush</h1>
-          <p className="mt-1 text-sm font-semibold text-slate-300">Easier chart with soundtrack-led notes</p>
+          <p className="mt-1 text-sm font-semibold text-slate-300">Starts easy, only gets faster, then stays hard</p>
           <p className="mt-2 max-w-sm truncate text-xs font-bold text-cyan-100/80">Song: {songName}</p>
         </div>
       </div>
