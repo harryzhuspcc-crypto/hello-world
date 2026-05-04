@@ -6,7 +6,7 @@ import type { Route } from "./+types/rhythm-rush";
 export function meta({}: Route.MetaArgs) {
   return [
     { title: "Rhythm Rush | Harry's Game Center" },
-    { name: "description", content: "A polished arrow-key rhythm game with falling notes, combos, and accuracy scoring." },
+    { name: "description", content: "A polished Z/X/,/. rhythm game with falling notes, combos, and accuracy scoring." },
   ];
 }
 
@@ -15,10 +15,10 @@ type Note = { lane: Lane; hitTime: number; holdTime: number; hit: boolean; misse
 type ChartItem = Lane | Lane[] | { lane: Lane; hold: number } | { chord: Lane[]; hold?: number };
 
 const lanes = [
-  { key: "ArrowLeft", label: "←", name: "LEFT", color: "#38bdf8" },
-  { key: "ArrowDown", label: "↓", name: "DOWN", color: "#a78bfa" },
-  { key: "ArrowUp", label: "↑", name: "UP", color: "#34d399" },
-  { key: "ArrowRight", label: "→", name: "RIGHT", color: "#fb7185" },
+  { key: "z", label: "Z", name: "Z", color: "#38bdf8" },
+  { key: "x", label: "X", name: "X", color: "#a78bfa" },
+  { key: ",", label: ",", name: "COMMA", color: "#34d399" },
+  { key: ".", label: ".", name: "PERIOD", color: "#fb7185" },
 ] as const;
 
 function createChart() {
@@ -118,7 +118,7 @@ export default function RhythmRush() {
       hits: 0,
       misses: 0,
       gameOver: false,
-      judgement: "Press Space or any arrow to start the soundtrack.",
+      judgement: "Press Space or Z / X / , / . to start the soundtrack.",
       judgementColor: "#e2e8f0",
       flash: [0, 0, 0, 0],
       held: [false, false, false, false],
@@ -253,7 +253,7 @@ export default function RhythmRush() {
       state.hits = 0;
       state.misses = 0;
       state.gameOver = false;
-      state.judgement = startNow ? "Restarted — soundtrack rolling." : "Press Space or any arrow to start the soundtrack.";
+      state.judgement = startNow ? "Restarted — soundtrack rolling." : "Press Space or Z / X / , / . to start the soundtrack.";
       state.judgementColor = "#e2e8f0";
       state.flash = [0, 0, 0, 0];
       state.held = [false, false, false, false];
@@ -362,7 +362,8 @@ export default function RhythmRush() {
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
-      const lane = lanes.findIndex((item) => item.key === event.key);
+      const pressedKey = event.key.toLowerCase();
+      const lane = lanes.findIndex((item) => item.key === pressedKey);
       if (lane >= 0) {
         event.preventDefault();
         if (event.repeat) return;
@@ -380,7 +381,8 @@ export default function RhythmRush() {
       }
     };
     const onKeyUp = (event: KeyboardEvent) => {
-      const lane = lanes.findIndex((item) => item.key === event.key);
+      const pressedKey = event.key.toLowerCase();
+      const lane = lanes.findIndex((item) => item.key === pressedKey);
       if (lane < 0) return;
       state.held[lane] = false;
       const elapsed = state.started ? currentGameTime() : 0;
@@ -555,7 +557,7 @@ export default function RhythmRush() {
         ctx.fillText(state.gameOver ? "Game Over" : "Rhythm Rush", w / 2, h / 2 - 68);
         ctx.font = "900 20px Inter, sans-serif";
         ctx.fillStyle = state.gameOver ? "#fecaca" : "#bae6fd";
-        ctx.fillText(state.gameOver ? "You made 5 mistakes. Press R to restart." : "Press SPACE, ENTER, click, or any arrow key to start the soundtrack", w / 2, h / 2 - 18);
+        ctx.fillText(state.gameOver ? "You made 5 mistakes. Press R to restart." : "Press SPACE, ENTER, click, or Z / X / , / . to start", w / 2, h / 2 - 18);
         ctx.font = "700 16px Inter, sans-serif";
         ctx.fillStyle = "#cbd5e1";
         ctx.fillText(state.gameOver ? "Endless mode only stops when mistakes reach 5." : "It starts easy, only gets faster, and stays hard after the ramp.", w / 2, h / 2 + 24);
@@ -609,7 +611,7 @@ export default function RhythmRush() {
       </div>
       <div ref={hudRef} className="pointer-events-none absolute left-6 top-28 z-20 grid w-72 gap-3 rounded-[1.5rem] border border-white/10 bg-black/55 p-5 text-sm shadow-2xl backdrop-blur [&_div]:flex [&_div]:items-center [&_div]:justify-between [&_strong]:text-xl [&_strong]:font-black" />
       <div ref={messageRef} className="pointer-events-none absolute bottom-24 left-1/2 z-20 -translate-x-1/2 rounded-full border border-white/10 bg-black/55 px-8 py-4 text-3xl font-black uppercase tracking-[0.2em] shadow-2xl backdrop-blur">Ready</div>
-      <div className="pointer-events-none absolute bottom-6 right-6 z-20 rounded-full border border-white/10 bg-black/45 px-5 py-3 text-xs font-black uppercase tracking-[0.18em] text-slate-300 backdrop-blur">Hold long arrows • Space Start • R Restart</div>
+      <div className="pointer-events-none absolute bottom-6 right-6 z-20 rounded-full border border-white/10 bg-black/45 px-5 py-3 text-xs font-black uppercase tracking-[0.18em] text-slate-300 backdrop-blur">Keys Z X , . • Hold long notes • Space Start • R Restart</div>
     </main>
   );
 }

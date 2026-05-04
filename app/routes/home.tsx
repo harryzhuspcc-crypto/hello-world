@@ -51,14 +51,14 @@ const games: Game[] = [
   },
   {
     title: "Rhythm Rush",
-    description: "Hit falling arrow notes on the beat with polished lanes, combos, and accuracy scoring.",
+    description: "Hit falling rhythm notes with Z, X, comma, and period in polished neon lanes.",
     accent: "from-pink-300 to-cyan-400",
     icon: "RR",
     href: "/rhythm-rush",
   },
   {
     title: "Feather Fling",
-    description: "Launch birds from a slingshot, smash towers, and clear every grumpy goblin target.",
+    description: "Launch birds from a stronger slingshot, smash towers, and directly hit every grumpy pig.",
     accent: "from-red-300 to-amber-400",
     icon: "FF",
     href: "/angry-bird",

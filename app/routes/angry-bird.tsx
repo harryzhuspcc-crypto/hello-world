@@ -8,7 +8,7 @@ export function meta({}: Route.MetaArgs) {
     { title: "Feather Fling | Harry's Game Center" },
     {
       name: "description",
-      content: "A polished slingshot physics game with birds, breakable towers, and grumpy goblin targets.",
+      content: "A polished slingshot physics game with birds, breakable towers, and grumpy pig targets.",
     },
   ];
 }
@@ -29,7 +29,9 @@ const WORLD_W = 1000;
 const WORLD_H = 600;
 const GROUND_Y = 520;
 const ANCHOR: Vec = { x: 155, y: 365 };
-const MAX_PULL = 95;
+const MAX_PULL = 155;
+const LAUNCH_POWER = 7.15;
+const TARGET_HIT_PAD = 10;
 
 const levels: Level[] = [
   {
@@ -125,7 +127,7 @@ const levels: Level[] = [
     ],
   },
   {
-    name: "Final Goblin Keep",
+    name: "Goblin Keep",
     birds: 6,
     blocks: [
       { x: 600, y: 430, w: 36, h: 90, hp: 3, kind: "wood" },
@@ -142,6 +144,101 @@ const levels: Level[] = [
       { x: 745, y: 304, r: 24, hp: 2 },
       { x: 855, y: 356, r: 23, hp: 1 },
       { x: 748, y: 199, r: 27, hp: 3 },
+    ],
+  },
+  {
+    name: "Canyon Crash",
+    birds: 6,
+    blocks: [
+      { x: 580, y: 455, w: 120, h: 26, hp: 2, kind: "wood" },
+      { x: 620, y: 395, w: 30, h: 86, hp: 2, kind: "wood" },
+      { x: 720, y: 435, w: 34, h: 85, hp: 3, kind: "stone" },
+      { x: 810, y: 435, w: 34, h: 85, hp: 3, kind: "stone" },
+      { x: 692, y: 390, w: 150, h: 26, hp: 2, kind: "glass" },
+      { x: 875, y: 455, w: 82, h: 26, hp: 2, kind: "wood" },
+    ],
+    targets: [
+      { x: 646, y: 365, r: 24, hp: 1 },
+      { x: 765, y: 361, r: 24, hp: 1 },
+      { x: 920, y: 491, r: 22, hp: 1 },
+    ],
+  },
+  {
+    name: "Wooden Maze",
+    birds: 6,
+    blocks: [
+      { x: 590, y: 430, w: 28, h: 90, hp: 2, kind: "wood" },
+      { x: 650, y: 430, w: 28, h: 90, hp: 2, kind: "wood" },
+      { x: 710, y: 430, w: 28, h: 90, hp: 2, kind: "wood" },
+      { x: 770, y: 430, w: 28, h: 90, hp: 2, kind: "wood" },
+      { x: 560, y: 385, w: 245, h: 24, hp: 3, kind: "wood" },
+      { x: 620, y: 335, w: 170, h: 24, hp: 2, kind: "glass" },
+      { x: 850, y: 430, w: 35, h: 90, hp: 4, kind: "stone" },
+    ],
+    targets: [
+      { x: 620, y: 356, r: 22, hp: 1 },
+      { x: 735, y: 356, r: 22, hp: 1 },
+      { x: 867, y: 399, r: 24, hp: 1 },
+    ],
+  },
+  {
+    name: "Stone Staircase",
+    birds: 7,
+    blocks: [
+      { x: 610, y: 470, w: 80, h: 30, hp: 3, kind: "stone" },
+      { x: 675, y: 425, w: 80, h: 30, hp: 3, kind: "stone" },
+      { x: 740, y: 380, w: 80, h: 30, hp: 3, kind: "stone" },
+      { x: 805, y: 335, w: 80, h: 30, hp: 3, kind: "stone" },
+      { x: 640, y: 390, w: 24, h: 130, hp: 2, kind: "wood" },
+      { x: 770, y: 330, w: 24, h: 190, hp: 2, kind: "wood" },
+      { x: 890, y: 430, w: 28, h: 90, hp: 2, kind: "glass" },
+    ],
+    targets: [
+      { x: 648, y: 362, r: 23, hp: 1 },
+      { x: 778, y: 302, r: 23, hp: 1 },
+      { x: 902, y: 402, r: 23, hp: 1 },
+    ],
+  },
+  {
+    name: "Glass Gauntlet",
+    birds: 7,
+    blocks: [
+      { x: 585, y: 450, w: 22, h: 70, hp: 1, kind: "glass" },
+      { x: 640, y: 450, w: 22, h: 70, hp: 1, kind: "glass" },
+      { x: 695, y: 450, w: 22, h: 70, hp: 1, kind: "glass" },
+      { x: 750, y: 450, w: 22, h: 70, hp: 1, kind: "glass" },
+      { x: 805, y: 450, w: 22, h: 70, hp: 1, kind: "glass" },
+      { x: 560, y: 410, w: 292, h: 22, hp: 2, kind: "glass" },
+      { x: 620, y: 360, w: 190, h: 22, hp: 2, kind: "glass" },
+      { x: 680, y: 310, w: 75, h: 22, hp: 2, kind: "wood" },
+    ],
+    targets: [
+      { x: 610, y: 383, r: 22, hp: 1 },
+      { x: 724, y: 332, r: 22, hp: 1 },
+      { x: 815, y: 383, r: 22, hp: 1 },
+      { x: 930, y: 492, r: 22, hp: 1 },
+    ],
+  },
+  {
+    name: "King Pig Castle",
+    birds: 8,
+    blocks: [
+      { x: 570, y: 430, w: 36, h: 90, hp: 3, kind: "wood" },
+      { x: 655, y: 430, w: 36, h: 90, hp: 4, kind: "stone" },
+      { x: 740, y: 430, w: 36, h: 90, hp: 4, kind: "stone" },
+      { x: 825, y: 430, w: 36, h: 90, hp: 4, kind: "stone" },
+      { x: 910, y: 430, w: 36, h: 90, hp: 3, kind: "wood" },
+      { x: 540, y: 383, w: 405, h: 28, hp: 4, kind: "stone" },
+      { x: 600, y: 330, w: 285, h: 26, hp: 3, kind: "wood" },
+      { x: 670, y: 276, w: 150, h: 24, hp: 2, kind: "glass" },
+      { x: 720, y: 218, w: 48, h: 58, hp: 4, kind: "stone" },
+    ],
+    targets: [
+      { x: 612, y: 356, r: 23, hp: 1 },
+      { x: 700, y: 303, r: 23, hp: 1 },
+      { x: 786, y: 303, r: 23, hp: 1 },
+      { x: 870, y: 356, r: 23, hp: 1 },
+      { x: 744, y: 187, r: 30, hp: 2 },
     ],
   },
 ];
@@ -190,7 +287,7 @@ export default function AngryBirdGame() {
       offsetY: 0,
       last: performance.now(),
       settleTimer: 0,
-      message: "Drag the bird backward, then release to fling.",
+      message: "Pull farther back for more power. Directly hit every pig to win.",
       messageColor: "#e0f2fe",
       audioCtx: null as AudioContext | null,
     };
@@ -277,7 +374,7 @@ export default function AngryBirdGame() {
       const bonus = Math.max(0, levels[state.levelIndex].birds - state.birdNumber - 1) * 5000;
       state.score += bonus;
       state.mode = "won";
-      state.message = state.levelIndex === levels.length - 1 ? "All goblin forts cleared! Press R to play again." : `Level cleared! Bonus ${bonus.toLocaleString()} — press Space for next level.`;
+      state.message = state.levelIndex === levels.length - 1 ? "All pig forts cleared! Press R to play again." : `Level cleared! Bonus ${bonus.toLocaleString()} — press Space for next level.`;
       state.messageColor = "#bbf7d0";
       beep(660, 0.12, "triangle", 0.1);
       setTimeout(() => beep(880, 0.18, "triangle", 0.1), 120);
@@ -305,11 +402,11 @@ export default function AngryBirdGame() {
       }
       state.bird.x = state.drag.x;
       state.bird.y = state.drag.y;
-      state.bird.vx = pullX * 5.9;
-      state.bird.vy = pullY * 5.9;
+      state.bird.vx = pullX * LAUNCH_POWER;
+      state.bird.vy = pullY * LAUNCH_POWER;
       state.bird.trail = [];
       state.mode = "flying";
-      state.message = "Good shot! Knock out every grumpy goblin.";
+      state.message = "Good shot! The pigs only count when the bird hits them directly.";
       state.messageColor = "#bae6fd";
       beep(360 + power * 3, 0.16, "square", 0.07);
     };
@@ -432,9 +529,11 @@ export default function AngryBirdGame() {
 
       for (const target of state.targets) {
         const d = dist(bird, target);
-        if (d > bird.r + target.r) continue;
+        if (d > bird.r + target.r + TARGET_HIT_PAD) continue;
         const speed = Math.hypot(bird.vx, bird.vy);
-        target.hp -= speed > 180 ? 1 : 0.45;
+        target.hp -= speed > 120 ? Math.max(1, target.maxHp) : 1;
+        state.message = "Direct pig hit!";
+        state.messageColor = "#bbf7d0";
         target.pop = 1;
         state.score += 1200;
         bird.vx *= -0.22;
@@ -659,8 +758,8 @@ export default function AngryBirdGame() {
       const pullY = ANCHOR.y - state.drag.y;
       let x = state.drag.x;
       let y = state.drag.y;
-      let vx = pullX * 5.9;
-      let vy = pullY * 5.9;
+      let vx = pullX * LAUNCH_POWER;
+      let vy = pullY * LAUNCH_POWER;
       ctx.fillStyle = "rgba(15,23,42,0.34)";
       for (let i = 0; i < 28; i += 1) {
         const dt = 0.075;
@@ -710,7 +809,7 @@ export default function AngryBirdGame() {
 
       if (hudRef.current) {
         const remaining = levels[state.levelIndex].birds - state.birdNumber;
-        hudRef.current.innerHTML = `<div><span>Level</span><strong>${state.levelIndex + 1}/${levels.length}</strong></div><div><span>Birds</span><strong>${Math.max(0, remaining)}</strong></div><div><span>Goblins</span><strong>${state.targets.length}</strong></div><div><span>Score</span><strong>${state.score.toLocaleString()}</strong></div>`;
+        hudRef.current.innerHTML = `<div><span>Level</span><strong>${state.levelIndex + 1}/${levels.length}</strong></div><div><span>Birds</span><strong>${Math.max(0, remaining)}</strong></div><div><span>Pigs</span><strong>${state.targets.length}</strong></div><div><span>Score</span><strong>${state.score.toLocaleString()}</strong></div>`;
       }
       if (messageRef.current) {
         messageRef.current.textContent = state.message;
@@ -746,15 +845,15 @@ export default function AngryBirdGame() {
       <div className="pointer-events-none absolute left-4 right-4 top-4 z-10 flex flex-wrap items-start justify-between gap-3">
         <div className="rounded-3xl border border-white/30 bg-slate-950/55 px-5 py-4 shadow-2xl shadow-black/20 backdrop-blur-md">
           <p className="text-xs font-black uppercase tracking-[0.28em] text-amber-200">Feather Fling</p>
-          <h1 className="text-2xl font-black">Slingshot Goblin Smash</h1>
-          <p ref={messageRef} className="mt-1 max-w-xl text-sm font-bold text-sky-100">Drag the bird backward, then release to fling.</p>
+          <h1 className="text-2xl font-black">Slingshot Pig Smash</h1>
+          <p ref={messageRef} className="mt-1 max-w-xl text-sm font-bold text-sky-100">Pull farther back for more power. Directly hit every pig to win.</p>
         </div>
         <div ref={hudRef} className="grid grid-cols-4 gap-2 rounded-3xl border border-white/30 bg-slate-950/55 p-3 text-center shadow-2xl shadow-black/20 backdrop-blur-md [&_div]:rounded-2xl [&_div]:bg-white/10 [&_div]:px-3 [&_div]:py-2 [&_span]:block [&_span]:text-[10px] [&_span]:font-bold [&_span]:uppercase [&_span]:tracking-[0.18em] [&_span]:text-slate-300 [&_strong]:text-lg [&_strong]:font-black" />
       </div>
       <div className="pointer-events-none absolute bottom-4 left-4 right-4 z-10 flex flex-wrap items-end justify-between gap-3">
         <div className="rounded-3xl border border-white/30 bg-slate-950/55 px-5 py-4 text-sm font-bold leading-6 text-slate-100 shadow-2xl shadow-black/20 backdrop-blur-md">
           <p>Controls: drag on the bird, pull back, and release.</p>
-          <p className="text-slate-300">Clear every goblin. Press <span className="text-white">R</span> to restart, <span className="text-white">Space</span> after clearing a level.</p>
+          <p className="text-slate-300">Clear every pig with direct bird hits. Press <span className="text-white">R</span> to restart, <span className="text-white">Space</span> after clearing a level.</p>
         </div>
         <Link className="pointer-events-auto rounded-full bg-white px-5 py-3 text-xs font-black uppercase tracking-[0.22em] text-slate-950 shadow-xl transition hover:-translate-y-1 hover:bg-amber-100" to="/">
           Back to Lobby
