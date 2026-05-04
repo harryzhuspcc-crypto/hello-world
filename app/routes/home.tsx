@@ -56,6 +56,13 @@ const games: Game[] = [
     icon: "RR",
     href: "/rhythm-rush",
   },
+  {
+    title: "Feather Fling",
+    description: "Launch birds from a slingshot, smash towers, and clear every grumpy goblin target.",
+    accent: "from-red-300 to-amber-400",
+    icon: "FF",
+    href: "/angry-bird",
+  },
 ];
 
 const gameCardClass =
@@ -194,7 +201,7 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="mt-16 grid gap-5 md:grid-cols-2 xl:grid-cols-5" id="games">
+        <div className="mt-16 grid gap-5 md:grid-cols-2 xl:grid-cols-6" id="games">
           {games.map((game) => (
             <GameCard game={game} key={game.title} />
           ))}

@@ -8,4 +8,5 @@ export default [
   route("sky-ace-infinite", "routes/sky-ace-infinite.tsx"),
   route("three-body-survival", "routes/three-body-survival.tsx"),
   route("rhythm-rush", "routes/rhythm-rush.tsx"),
+  route("angry-bird", "routes/angry-bird.tsx"),
 ] satisfies RouteConfig;
