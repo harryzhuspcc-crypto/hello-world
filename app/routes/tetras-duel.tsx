@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 
 import type { Route } from "./+types/tetras-duel";
@@ -237,6 +237,8 @@ function chooseAiPlan(board: Board, piece: Piece, skill: number) {
 export default function TetrasDuel() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const hudRef = useRef<HTMLDivElement | null>(null);
+  const startSkillRef = useRef<(skill: number) => void>(() => {});
+  const [setupUi, setSetupUi] = useState({ visible: true, recommended: 0.24 });
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -249,6 +251,7 @@ export default function TetrasDuel() {
       return Number.isFinite(parsed) ? clamp(parsed, 0.08, 0.82) : 0.24;
     };
     const recommendedAtStart = readRecommendedSkill();
+    setSetupUi({ visible: true, recommended: recommendedAtStart });
 
     const state = {
       player: sideFactory(),
@@ -280,6 +283,7 @@ export default function TetrasDuel() {
 
     const startMatch = (skill = state.skill) => {
       state.skill = clamp(skill, 0.08, 0.82);
+      setSetupUi({ visible: false, recommended: state.recommendedSkill });
       state.player = sideFactory();
       state.ai = sideFactory();
       state.aiPlan = chooseAiPlan(state.ai.board, state.ai.piece, state.skill);
@@ -291,6 +295,8 @@ export default function TetrasDuel() {
       state.setup = false;
       state.message = `AI skill set to ${(state.skill * 100).toFixed(0)}%. Clear lines to send garbage!`;
     };
+
+    startSkillRef.current = startMatch;
 
     const reset = () => startMatch(state.skill);
 
@@ -310,6 +316,7 @@ export default function TetrasDuel() {
       const performance = clamp(state.player.lines / Math.max(1, state.playerPieces) + state.player.tetrises * 0.14 - pressure * 0.25, 0, 1);
       const target = clamp(state.skill + (playerWon ? 0.07 : -0.06) + (performance - 0.28) * 0.09, 0.08, 0.82);
       state.recommendedSkill = target;
+      setSetupUi((current) => ({ ...current, recommended: target }));
       window.localStorage.setItem("block-drop-duel-recommended-skill", target.toFixed(3));
     };
 
@@ -423,6 +430,7 @@ export default function TetrasDuel() {
         state.paused = false;
         state.winner = "";
         state.recommendedSkill = readRecommendedSkill();
+        setSetupUi({ visible: true, recommended: state.recommendedSkill });
         state.message = "Choose an AI skill, or press Enter for the recommendation.";
         return;
       }
@@ -458,19 +466,7 @@ export default function TetrasDuel() {
       }
     };
 
-    const onPointerDown = (event: PointerEvent) => {
-      if (!state.setup) return;
-      const buttons = state.skillButtons.length > 0 ? state.skillButtons : getSkillButtonRects(window.innerWidth, window.innerHeight);
-      const button = buttons.find((item) => event.clientX >= item.x && event.clientX <= item.x + item.w && event.clientY >= item.y && event.clientY <= item.y + item.h);
-      if (button) {
-        event.preventDefault();
-        event.stopPropagation();
-        startMatch(button.skill);
-      }
-    };
-
     document.addEventListener("keydown", onKeyDown, true);
-    window.addEventListener("pointerdown", onPointerDown, true);
 
     const updateAi = (dt: number) => {
       if (!state.ai.alive || state.winner) return;
@@ -685,7 +681,7 @@ export default function TetrasDuel() {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
       document.removeEventListener("keydown", onKeyDown, true);
-      window.removeEventListener("pointerdown", onPointerDown, true);
+      startSkillRef.current = () => {};
     };
   }, []);
 
@@ -701,6 +697,45 @@ export default function TetrasDuel() {
           Back to Lobby
         </Link>
       </div>
+      {setupUi.visible ? (
+        <section className="absolute left-1/2 top-1/2 z-30 w-[min(780px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-[2rem] border border-cyan-200/30 bg-slate-950/95 p-6 text-center shadow-2xl shadow-cyan-950/40 backdrop-blur-xl">
+          <p className="text-xs font-black uppercase tracking-[0.28em] text-cyan-200">Skill Select</p>
+          <h2 className="mt-2 text-4xl font-black text-white">Choose AI Level</h2>
+          <p className="mt-3 text-sm font-bold text-cyan-100">
+            Recommended: {(setupUi.recommended * 100).toFixed(0)}% — press Enter to use it.
+          </p>
+          <div className="mt-6 grid gap-3 sm:grid-cols-5">
+            {skillOptions.map((option, index) => {
+              const recommended = Math.abs(option.skill - setupUi.recommended) < 0.08;
+              return (
+                <button
+                  className={`rounded-2xl border px-3 py-5 text-center transition hover:-translate-y-1 ${recommended ? "border-cyan-200 bg-cyan-300/25 shadow-lg shadow-cyan-500/20" : "border-white/15 bg-white/10 hover:bg-white/15"}`}
+                  key={option.label}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    startSkillRef.current(option.skill);
+                  }}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  type="button"
+                >
+                  <span className="block text-xs font-black uppercase tracking-[0.22em] text-slate-300">Press {index + 1}</span>
+                  <span className="mt-2 block text-xl font-black text-white">{option.label}</span>
+                  <span className="mt-1 block text-lg font-black text-cyan-100">{(option.skill * 100).toFixed(0)}%</span>
+                  <span className="mt-2 block text-[11px] font-bold leading-4 text-slate-400">{recommended ? "Recommended" : option.note}</span>
+                </button>
+              );
+            })}
+          </div>
+          <button
+            className="mt-6 rounded-full bg-white px-6 py-3 text-xs font-black uppercase tracking-[0.2em] text-slate-950 transition hover:-translate-y-1 hover:bg-cyan-100"
+            onClick={() => startSkillRef.current(setupUi.recommended)}
+            type="button"
+          >
+            Start Recommended
+          </button>
+        </section>
+      ) : null}
       <div ref={hudRef} className="pointer-events-none absolute bottom-4 left-1/2 z-10 flex w-[min(920px,calc(100vw-2rem))] -translate-x-1/2 flex-col gap-1 rounded-3xl border border-white/10 bg-black/55 px-5 py-4 text-center text-sm font-bold text-slate-200 shadow-2xl backdrop-blur-md [&_span]:text-xs [&_span]:font-semibold [&_span]:text-slate-400" />
     </main>
   );
