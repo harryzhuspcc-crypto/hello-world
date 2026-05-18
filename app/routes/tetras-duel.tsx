@@ -376,6 +376,32 @@ export default function TetrasDuel() {
       lockPiece(state.player, "player");
     };
 
+    const getSkillButtonRects = (w: number, h: number) => {
+      const panelW = Math.min(760, w - 40);
+      const panelH = 430;
+      const x = (w - panelW) / 2;
+      const y = Math.max(90, (h - panelH) / 2);
+      const buttonW = Math.min(128, (panelW - 90) / skillOptions.length);
+      const buttonH = 118;
+      const gap = 12;
+      const startX = x + (panelW - skillOptions.length * buttonW - (skillOptions.length - 1) * gap) / 2;
+      return skillOptions.map((option, index) => ({
+        x: startX + index * (buttonW + gap),
+        y: y + 155,
+        w: buttonW,
+        h: buttonH,
+        skill: option.skill,
+        label: option.label,
+      }));
+    };
+
+    const skillNumberFromKey = (event: KeyboardEvent) => {
+      const keyNumber = Number(event.key);
+      if (Number.isInteger(keyNumber) && keyNumber >= 1 && keyNumber <= skillOptions.length) return keyNumber;
+      const codeMatch = event.code.match(/^(?:Digit|Numpad)([1-5])$/);
+      return codeMatch ? Number(codeMatch[1]) : 0;
+    };
+
     const onKeyDown = (event: KeyboardEvent) => {
       if (state.setup) {
         if (event.code === "Enter" || event.code === "Space") {
@@ -383,9 +409,10 @@ export default function TetrasDuel() {
           startMatch(state.recommendedSkill);
           return;
         }
-        const digit = Number(event.key);
-        if (Number.isInteger(digit) && digit >= 1 && digit <= skillOptions.length) {
+        const digit = skillNumberFromKey(event);
+        if (digit) {
           event.preventDefault();
+          event.stopPropagation();
           startMatch(skillOptions[digit - 1].skill);
           return;
         }
@@ -433,12 +460,17 @@ export default function TetrasDuel() {
 
     const onPointerDown = (event: PointerEvent) => {
       if (!state.setup) return;
-      const button = state.skillButtons.find((item) => event.clientX >= item.x && event.clientX <= item.x + item.w && event.clientY >= item.y && event.clientY <= item.y + item.h);
-      if (button) startMatch(button.skill);
+      const buttons = state.skillButtons.length > 0 ? state.skillButtons : getSkillButtonRects(window.innerWidth, window.innerHeight);
+      const button = buttons.find((item) => event.clientX >= item.x && event.clientX <= item.x + item.w && event.clientY >= item.y && event.clientY <= item.y + item.h);
+      if (button) {
+        event.preventDefault();
+        event.stopPropagation();
+        startMatch(button.skill);
+      }
     };
 
-    window.addEventListener("keydown", onKeyDown);
-    canvas.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown, true);
+    window.addEventListener("pointerdown", onPointerDown, true);
 
     const updateAi = (dt: number) => {
       if (!state.ai.alive || state.winner) return;
@@ -535,17 +567,15 @@ export default function TetrasDuel() {
       ctx.font = "800 17px Inter, sans-serif";
       ctx.fillText(`Recommended: ${(state.recommendedSkill * 100).toFixed(0)}% — based on your past matches`, w / 2, y + 110);
 
-      state.skillButtons = [];
-      const buttonW = Math.min(128, (panelW - 90) / skillOptions.length);
-      const buttonH = 118;
-      const gap = 12;
-      const startX = x + (panelW - skillOptions.length * buttonW - (skillOptions.length - 1) * gap) / 2;
+      state.skillButtons = getSkillButtonRects(w, h);
       for (let index = 0; index < skillOptions.length; index += 1) {
         const option = skillOptions[index];
-        const bx = startX + index * (buttonW + gap);
-        const by = y + 155;
+        const rect = state.skillButtons[index];
+        const bx = rect.x;
+        const by = rect.y;
+        const buttonW = rect.w;
+        const buttonH = rect.h;
         const recommended = Math.abs(option.skill - state.recommendedSkill) < 0.08;
-        state.skillButtons.push({ x: bx, y: by, w: buttonW, h: buttonH, skill: option.skill, label: option.label });
         ctx.fillStyle = recommended ? "rgba(34,211,238,0.28)" : "rgba(255,255,255,0.08)";
         ctx.fillRect(bx, by, buttonW, buttonH);
         ctx.strokeStyle = recommended ? "#67e8f9" : "rgba(255,255,255,0.18)";
@@ -654,8 +684,8 @@ export default function TetrasDuel() {
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
-      window.removeEventListener("keydown", onKeyDown);
-      canvas.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown, true);
+      window.removeEventListener("pointerdown", onPointerDown, true);
     };
   }, []);
 
