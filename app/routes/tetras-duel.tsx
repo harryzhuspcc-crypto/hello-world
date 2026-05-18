@@ -210,11 +210,11 @@ function placePreview(board: Board, piece: Piece) {
 type SkillButton = { x: number; y: number; w: number; h: number; skill: number; label: string };
 
 const skillOptions = [
-  { label: "Sleepy", skill: 0.12, note: "AI is very confused" },
-  { label: "Easy", skill: 0.24, note: "good for learning" },
-  { label: "Normal", skill: 0.38, note: "still pretty silly" },
-  { label: "Spicy", skill: 0.56, note: "faster, fewer mistakes" },
-  { label: "Bossy", skill: 0.74, note: "hard but beatable" },
+  { label: "Level 1", skill: 0.12, note: "AI is very confused" },
+  { label: "Level 2", skill: 0.24, note: "good for learning" },
+  { label: "Level 3", skill: 0.38, note: "still pretty silly" },
+  { label: "Level 4", skill: 0.56, note: "faster, fewer mistakes" },
+  { label: "Level 5", skill: 0.74, note: "hard but beatable" },
 ];
 
 function chooseAiPlan(board: Board, piece: Piece, skill: number) {
