@@ -207,6 +207,16 @@ function placePreview(board: Board, piece: Piece) {
   return { board: copy, cleared };
 }
 
+type SkillButton = { x: number; y: number; w: number; h: number; skill: number; label: string };
+
+const skillOptions = [
+  { label: "Sleepy", skill: 0.12, note: "AI is very confused" },
+  { label: "Easy", skill: 0.24, note: "good for learning" },
+  { label: "Normal", skill: 0.38, note: "still pretty silly" },
+  { label: "Spicy", skill: 0.56, note: "faster, fewer mistakes" },
+  { label: "Bossy", skill: 0.74, note: "hard but beatable" },
+];
+
 function chooseAiPlan(board: Board, piece: Piece, skill: number) {
   const candidates: Array<{ x: number; r: number; score: number }> = [];
   for (let r = 0; r < 4; r += 1) {
@@ -233,18 +243,28 @@ export default function TetrasDuel() {
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
 
+    const readRecommendedSkill = () => {
+      const stored = window.localStorage.getItem("block-drop-duel-recommended-skill");
+      const parsed = stored ? Number(stored) : Number.NaN;
+      return Number.isFinite(parsed) ? clamp(parsed, 0.08, 0.82) : 0.24;
+    };
+    const recommendedAtStart = readRecommendedSkill();
+
     const state = {
       player: sideFactory(),
       ai: sideFactory(),
       aiPlan: { x: 3, r: 0 },
       aiMoveTimer: 0,
-      skill: 0.22,
+      skill: recommendedAtStart,
+      recommendedSkill: recommendedAtStart,
+      skillButtons: [] as SkillButton[],
+      setup: true,
       playerClears: 0,
       playerPieces: 0,
       winner: "" as "" | "You" | "AI",
       paused: false,
       last: performance.now(),
-      message: "Clear lines to send garbage. A four-line clear sends a huge attack!",
+      message: "Choose an AI skill. The highlighted one is recommended from your past games.",
     };
 
     const resize = () => {
@@ -258,17 +278,21 @@ export default function TetrasDuel() {
     resize();
     window.addEventListener("resize", resize);
 
-    const reset = () => {
+    const startMatch = (skill = state.skill) => {
+      state.skill = clamp(skill, 0.08, 0.82);
       state.player = sideFactory();
       state.ai = sideFactory();
       state.aiPlan = chooseAiPlan(state.ai.board, state.ai.piece, state.skill);
+      state.aiMoveTimer = 0;
       state.playerClears = 0;
       state.playerPieces = 0;
       state.winner = "";
       state.paused = false;
-      state.message = "Clear lines to send garbage. A four-line clear sends a huge attack!";
+      state.setup = false;
+      state.message = `AI skill set to ${(state.skill * 100).toFixed(0)}%. Clear lines to send garbage!`;
     };
-    reset();
+
+    const reset = () => startMatch(state.skill);
 
     const adaptSkill = () => {
       const pressure = heights(state.player.board).reduce((max, h) => Math.max(max, h), 0) / ROWS;
@@ -281,6 +305,14 @@ export default function TetrasDuel() {
       state.skill = clamp(state.skill, 0.08, 0.82);
     };
 
+    const saveRecommendation = (playerWon: boolean) => {
+      const pressure = heights(state.player.board).reduce((max, h) => Math.max(max, h), 0) / ROWS;
+      const performance = clamp(state.player.lines / Math.max(1, state.playerPieces) + state.player.tetrises * 0.14 - pressure * 0.25, 0, 1);
+      const target = clamp(state.skill + (playerWon ? 0.07 : -0.06) + (performance - 0.28) * 0.09, 0.08, 0.82);
+      state.recommendedSkill = target;
+      window.localStorage.setItem("block-drop-duel-recommended-skill", target.toFixed(3));
+    };
+
     const spawnNext = (side: GameSide, owner: PlayerSide) => {
       side.piece = spawn(side.next);
       side.next = randomPiece();
@@ -288,7 +320,11 @@ export default function TetrasDuel() {
       if (collides(side.board, side.piece)) {
         side.alive = false;
         state.winner = owner === "player" ? "AI" : "You";
-        state.message = owner === "player" ? "The AI topped you out. Press R for a rematch." : "You buried the AI! Press R for a rematch.";
+        const playerWon = owner === "ai";
+        saveRecommendation(playerWon);
+        state.message = playerWon
+          ? `You buried the AI! New recommended skill: ${(state.recommendedSkill * 100).toFixed(0)}%. Press M to choose or R for rematch.`
+          : `The AI topped you out. New recommended skill: ${(state.recommendedSkill * 100).toFixed(0)}%. Press M to choose or R for rematch.`;
       }
       if (owner === "ai") state.aiPlan = chooseAiPlan(side.board, side.piece, state.skill);
       else state.playerPieces += 1;
@@ -341,6 +377,28 @@ export default function TetrasDuel() {
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
+      if (state.setup) {
+        if (event.code === "Enter" || event.code === "Space") {
+          event.preventDefault();
+          startMatch(state.recommendedSkill);
+          return;
+        }
+        const digit = Number(event.key);
+        if (Number.isInteger(digit) && digit >= 1 && digit <= skillOptions.length) {
+          event.preventDefault();
+          startMatch(skillOptions[digit - 1].skill);
+          return;
+        }
+      }
+      if (event.code === "KeyM") {
+        event.preventDefault();
+        state.setup = true;
+        state.paused = false;
+        state.winner = "";
+        state.recommendedSkill = readRecommendedSkill();
+        state.message = "Choose an AI skill, or press Enter for the recommendation.";
+        return;
+      }
       if (event.code === "KeyR") {
         event.preventDefault();
         reset();
@@ -350,7 +408,7 @@ export default function TetrasDuel() {
         state.paused = !state.paused;
         return;
       }
-      if (!state.player.alive || state.paused || state.winner) return;
+      if (!state.player.alive || state.paused || state.winner || state.setup) return;
       if (event.code === "ArrowLeft" || event.code === "KeyA") {
         event.preventDefault();
         move(state.player, -1);
@@ -372,7 +430,15 @@ export default function TetrasDuel() {
         hardDrop();
       }
     };
+
+    const onPointerDown = (event: PointerEvent) => {
+      if (!state.setup) return;
+      const button = state.skillButtons.find((item) => event.clientX >= item.x && event.clientX <= item.x + item.w && event.clientY >= item.y && event.clientY <= item.y + item.h);
+      if (button) startMatch(button.skill);
+    };
+
     window.addEventListener("keydown", onKeyDown);
+    canvas.addEventListener("pointerdown", onPointerDown);
 
     const updateAi = (dt: number) => {
       if (!state.ai.alive || state.winner) return;
@@ -451,6 +517,61 @@ export default function TetrasDuel() {
       ctx.fillText(`Tetras ${side.tetrises}   Sent ${side.garbageSent}`, ox + 10, oy + BOARD_H + 48);
     };
 
+    const drawSkillSetup = (w: number, h: number) => {
+      const panelW = Math.min(760, w - 40);
+      const panelH = 430;
+      const x = (w - panelW) / 2;
+      const y = Math.max(90, (h - panelH) / 2);
+      ctx.fillStyle = "rgba(2,6,23,0.82)";
+      ctx.fillRect(x, y, panelW, panelH);
+      ctx.strokeStyle = "rgba(125,211,252,0.45)";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(x, y, panelW, panelH);
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "900 42px Inter, sans-serif";
+      ctx.fillText("Choose AI Skill", w / 2, y + 70);
+      ctx.fillStyle = "#bae6fd";
+      ctx.font = "800 17px Inter, sans-serif";
+      ctx.fillText(`Recommended: ${(state.recommendedSkill * 100).toFixed(0)}% — based on your past matches`, w / 2, y + 110);
+
+      state.skillButtons = [];
+      const buttonW = Math.min(128, (panelW - 90) / skillOptions.length);
+      const buttonH = 118;
+      const gap = 12;
+      const startX = x + (panelW - skillOptions.length * buttonW - (skillOptions.length - 1) * gap) / 2;
+      for (let index = 0; index < skillOptions.length; index += 1) {
+        const option = skillOptions[index];
+        const bx = startX + index * (buttonW + gap);
+        const by = y + 155;
+        const recommended = Math.abs(option.skill - state.recommendedSkill) < 0.08;
+        state.skillButtons.push({ x: bx, y: by, w: buttonW, h: buttonH, skill: option.skill, label: option.label });
+        ctx.fillStyle = recommended ? "rgba(34,211,238,0.28)" : "rgba(255,255,255,0.08)";
+        ctx.fillRect(bx, by, buttonW, buttonH);
+        ctx.strokeStyle = recommended ? "#67e8f9" : "rgba(255,255,255,0.18)";
+        ctx.lineWidth = recommended ? 3 : 1.5;
+        ctx.strokeRect(bx, by, buttonW, buttonH);
+        ctx.fillStyle = recommended ? "#fef08a" : "#e2e8f0";
+        ctx.font = "900 13px Inter, sans-serif";
+        ctx.fillText(`${index + 1}`, bx + buttonW / 2, by + 24);
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "900 19px Inter, sans-serif";
+        ctx.fillText(option.label, bx + buttonW / 2, by + 52);
+        ctx.fillStyle = "#bae6fd";
+        ctx.font = "900 18px Inter, sans-serif";
+        ctx.fillText(`${(option.skill * 100).toFixed(0)}%`, bx + buttonW / 2, by + 79);
+        ctx.fillStyle = "#94a3b8";
+        ctx.font = "700 10px Inter, sans-serif";
+        ctx.fillText(option.note, bx + buttonW / 2, by + 101);
+      }
+
+      ctx.fillStyle = "#cbd5e1";
+      ctx.font = "800 15px Inter, sans-serif";
+      ctx.fillText("Click a card, press 1-5, or press Enter to use the recommendation.", w / 2, y + 320);
+      ctx.fillStyle = "#fef3c7";
+      ctx.fillText("The AI still adjusts during the match so it stays fun.", w / 2, y + 350);
+    };
+
     const draw = () => {
       const w = window.innerWidth;
       const h = window.innerHeight;
@@ -466,6 +587,14 @@ export default function TetrasDuel() {
         ctx.beginPath();
         ctx.arc((i * 139 + performance.now() * 0.012) % (w + 100) - 50, (i * 91) % h, 2 + (i % 4), 0, Math.PI * 2);
         ctx.fill();
+      }
+
+      if (state.setup) {
+        drawSkillSetup(w, h);
+        if (hudRef.current) {
+          hudRef.current.innerHTML = `<strong>${state.message}</strong><span>Recommended ${(state.recommendedSkill * 100).toFixed(0)}% • Click a skill or press 1-5 • Enter starts recommended</span>`;
+        }
+        return;
       }
 
       const gap = 120;
@@ -499,11 +628,11 @@ export default function TetrasDuel() {
         ctx.fillText(state.paused ? "Paused" : `${state.winner} Win!`, w / 2, h / 2 - 30);
         ctx.fillStyle = "white";
         ctx.font = "800 20px Inter, sans-serif";
-        ctx.fillText(state.paused ? "Press P to keep playing" : "Press R for a rematch", w / 2, h / 2 + 18);
+        ctx.fillText(state.paused ? "Press P to keep playing" : "Press R for a rematch • M for skill select", w / 2, h / 2 + 18);
       }
 
       if (hudRef.current) {
-        hudRef.current.innerHTML = `<strong>${state.message}</strong><span>Move A/D or arrows • Rotate W/↑ • Soft drop S/↓ • Hard drop Space • R restart • P pause</span>`;
+        hudRef.current.innerHTML = `<strong>${state.message}</strong><span>Move A/D or arrows • Rotate W/↑ • Soft drop S/↓ • Hard drop Space • R rematch • M skill select • P pause</span>`;
       }
     };
 
@@ -511,7 +640,7 @@ export default function TetrasDuel() {
     const tick = (now: number) => {
       const dt = Math.min(0.04, (now - state.last) / 1000 || 0.016);
       state.last = now;
-      if (!state.paused && !state.winner) {
+      if (!state.setup && !state.paused && !state.winner) {
         updateAi(dt);
         updateSideGravity(state.player, "player", dt);
         updateSideGravity(state.ai, "ai", dt);
@@ -526,6 +655,7 @@ export default function TetrasDuel() {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
       window.removeEventListener("keydown", onKeyDown);
+      canvas.removeEventListener("pointerdown", onPointerDown);
     };
   }, []);
 
