@@ -63,6 +63,13 @@ const games: Game[] = [
     icon: "FF",
     href: "/angry-bird",
   },
+  {
+    title: "Block Drop Duel",
+    description: "Stack blocks against a silly adaptive AI. Clear lines to dump garbage onto its board.",
+    accent: "from-cyan-300 to-purple-400",
+    icon: "BD",
+    href: "/tetras-duel",
+  },
 ];
 
 const gameCardClass =
@@ -201,7 +208,7 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="mt-16 grid gap-5 md:grid-cols-2 xl:grid-cols-6" id="games">
+        <div className="mt-16 grid gap-5 md:grid-cols-2 xl:grid-cols-7" id="games">
           {games.map((game) => (
             <GameCard game={game} key={game.title} />
           ))}

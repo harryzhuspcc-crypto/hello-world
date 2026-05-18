@@ -9,4 +9,5 @@ export default [
   route("three-body-survival", "routes/three-body-survival.tsx"),
   route("rhythm-rush", "routes/rhythm-rush.tsx"),
   route("angry-bird", "routes/angry-bird.tsx"),
+  route("tetras-duel", "routes/tetras-duel.tsx"),
 ] satisfies RouteConfig;
