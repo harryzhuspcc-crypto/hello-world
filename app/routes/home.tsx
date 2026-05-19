@@ -71,10 +71,10 @@ const games: Game[] = [
     href: "/tetras-duel",
   },
   {
-    title: "Rogue Blaster",
-    description: "Dodge slime bots and drones in a cartoon top-down foam-blaster survival arena.",
+    title: "Rough Run",
+    description: "Run right through flat city stages with a blaster. Clear enemies to open each blocker.",
     accent: "from-lime-300 to-yellow-300",
-    icon: "RB",
+    icon: "RR",
     href: "/rogue-blaster",
   },
 ];
