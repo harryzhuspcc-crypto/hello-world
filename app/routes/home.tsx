@@ -70,6 +70,13 @@ const games: Game[] = [
     icon: "BD",
     href: "/tetras-duel",
   },
+  {
+    title: "Rogue Blaster",
+    description: "Dodge slime bots and drones in a cartoon top-down foam-blaster survival arena.",
+    accent: "from-lime-300 to-yellow-300",
+    icon: "RB",
+    href: "/rogue-blaster",
+  },
 ];
 
 const gameCardClass =
@@ -208,7 +215,7 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="mt-16 grid gap-5 md:grid-cols-2 xl:grid-cols-7" id="games">
+        <div className="mt-16 grid gap-5 md:grid-cols-2 xl:grid-cols-8" id="games">
           {games.map((game) => (
             <GameCard game={game} key={game.title} />
           ))}
