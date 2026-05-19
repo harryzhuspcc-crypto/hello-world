@@ -98,7 +98,7 @@ export default function RogueBlaster() {
     const keys = new Set<string>();
     const mouse = { x: window.innerWidth * 0.72, y: window.innerHeight * 0.55, down: false };
     const state = {
-      player: { x: 90, y: GROUND_Y - PLAYER_R, vx: 0, hp: 100, maxHp: 100, ammo: 30, maxAmmo: 30, reload: 0, cooldown: 0, invuln: 0 },
+      player: { x: 90, y: GROUND_Y - PLAYER_R, vx: 0, vy: 0, hp: 100, maxHp: 100, ammo: 30, maxAmmo: 30, reload: 0, cooldown: 0, invuln: 0 },
       cameraX: 0,
       enemies: makeEnemies(),
       bullets: [] as Bullet[],
@@ -126,7 +126,7 @@ export default function RogueBlaster() {
     window.addEventListener("resize", resize);
 
     const reset = () => {
-      state.player = { x: 90, y: GROUND_Y - PLAYER_R, vx: 0, hp: 100, maxHp: 100, ammo: 30, maxAmmo: 30, reload: 0, cooldown: 0, invuln: 0 };
+      state.player = { x: 90, y: GROUND_Y - PLAYER_R, vx: 0, vy: 0, hp: 100, maxHp: 100, ammo: 30, maxAmmo: 30, reload: 0, cooldown: 0, invuln: 0 };
       state.cameraX = 0;
       state.enemies = makeEnemies();
       state.bullets = [];
@@ -189,6 +189,10 @@ export default function RogueBlaster() {
         event.preventDefault();
         if (state.started && !state.gameOver && !state.won) reload();
         else reset();
+      }
+      if ((event.code === "KeyW" || event.code === "ArrowUp") && state.started && !state.gameOver && !state.won && state.player.y >= GROUND_Y - PLAYER_R - 1) {
+        event.preventDefault();
+        state.player.vy = -650;
       }
       if (event.code === "Enter" && (!state.started || state.gameOver || state.won)) reset();
     };
@@ -263,6 +267,12 @@ export default function RogueBlaster() {
       if (keys.has("KeyD") || keys.has("ArrowRight")) move += 1;
       const oldX = player.x;
       player.x += move * 280 * dt;
+      player.vy += 1550 * dt;
+      player.y += player.vy * dt;
+      if (player.y > GROUND_Y - PLAYER_R) {
+        player.y = GROUND_Y - PLAYER_R;
+        player.vy = 0;
+      }
       const end = stageEnd();
       if (stageAlive() && player.x > end - 170) {
         player.x = end - 170;
@@ -275,7 +285,6 @@ export default function RogueBlaster() {
         state.message = `Stage ${state.stage + 1}: keep running and shooting.`;
       }
       player.x = clamp(player.x, 70, FINISH_X);
-      player.y = GROUND_Y - PLAYER_R;
       for (const cover of covers) {
         if (player.x + PLAYER_R > cover.x && player.x - PLAYER_R < cover.x + cover.w && player.y + PLAYER_R > cover.y && player.y - PLAYER_R < cover.y + cover.h) player.x = oldX;
       }
@@ -468,7 +477,7 @@ export default function RogueBlaster() {
         ctx.fillText(state.won || state.gameOver ? `Score ${state.score.toLocaleString()} • Kills ${state.kills}` : "A flat run-through shooting game — no parkour, just run and gun", w / 2, h / 2 - 24);
         ctx.fillStyle = "#cbd5e1";
         ctx.font = "800 16px Inter, sans-serif";
-        ctx.fillText("A/D move • Mouse aim • Click/Space shoot • R reload/restart", w / 2, h / 2 + 24);
+        ctx.fillText("A/D move • W/↑ jump • Mouse aim • Click/Space shoot • R reload/restart", w / 2, h / 2 + 24);
       }
 
       if (hudRef.current) {
@@ -504,7 +513,7 @@ export default function RogueBlaster() {
         <div className="rounded-3xl border border-white/10 bg-black/50 px-5 py-4 shadow-2xl backdrop-blur-md">
           <p className="text-xs font-black uppercase tracking-[0.28em] text-yellow-200">Rough Run</p>
           <h1 className="text-2xl font-black">Run-Through Shooter</h1>
-          <p className="mt-1 text-sm font-bold text-slate-300">Flat side-scrolling run-and-gun. Clear enemies to pass each blocker.</p>
+          <p className="mt-1 text-sm font-bold text-slate-300">Side-scrolling run-and-gun. W or ↑ jumps; clear enemies to pass each blocker.</p>
         </div>
         <Link className="pointer-events-auto rounded-full bg-white px-5 py-3 text-xs font-black uppercase tracking-[0.2em] text-slate-950 shadow-xl transition hover:-translate-y-1 hover:bg-yellow-100" to="/">
           Back to Lobby
