@@ -72,8 +72,8 @@ const games: Game[] = [
   },
   {
     title: "Rough Run",
-    description: "Run right through flat city stages with a blaster. Clear enemies to open each blocker.",
-    accent: "from-lime-300 to-yellow-300",
+    description: "Run across an alien planet with a blaster while detailed robot squads attack the force gates.",
+    accent: "from-cyan-300 to-purple-400",
     icon: "RR",
     href: "/rogue-blaster",
   },

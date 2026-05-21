@@ -5,10 +5,10 @@ import type { Route } from "./+types/rogue-blaster";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Rough Run | Harry's Game Center" },
+    { title: "Rough Run: Planet Robots | Harry's Game Center" },
     {
       name: "description",
-      content: "A run-through side-scrolling shooting game with a boy, a blaster, enemies, checkpoints, and bosses.",
+      content: "A run-through alien-planet shooting game with a boy, a blaster, robot attackers, force gates, and bosses.",
     },
   ];
 }
@@ -29,11 +29,11 @@ const PLAYER_R = 22;
 const FINISH_X = STAGE_W * STAGES + 240;
 
 const enemyColors: Record<EnemyKind, string> = {
-  punk: "#ef4444",
+  punk: "#22d3ee",
   runner: "#f97316",
-  shooter: "#8b5cf6",
-  heavy: "#64748b",
-  boss: "#dc2626",
+  shooter: "#a78bfa",
+  heavy: "#94a3b8",
+  boss: "#ef4444",
 };
 
 const covers: Cover[] = Array.from({ length: STAGES }, (_, stage) => [
@@ -110,7 +110,7 @@ export default function RogueBlaster() {
       started: false,
       gameOver: false,
       won: false,
-      message: "Run right. Shoot everything. Clear the blockers to keep moving.",
+      message: "Run across the alien planet. Shoot robot attackers and open force gates.",
       last: performance.now(),
     };
 
@@ -138,7 +138,7 @@ export default function RogueBlaster() {
       state.started = true;
       state.gameOver = false;
       state.won = false;
-      state.message = "Run through the streets and clear each enemy block.";
+      state.message = "Run across the alien planet and clear each robot blockade.";
     };
 
     const stageEnd = () => (state.stage + 1) * STAGE_W;
@@ -276,13 +276,13 @@ export default function RogueBlaster() {
       const end = stageEnd();
       if (stageAlive() && player.x > end - 170) {
         player.x = end - 170;
-        state.message = "Clear the enemies before moving on!";
+        state.message = "Robot force gate locked — clear the sector!";
       }
       if (!stageAlive() && player.x > end - 110 && state.stage < STAGES - 1) {
         state.stage += 1;
         player.hp = Math.min(player.maxHp, player.hp + 20);
         player.ammo = player.maxAmmo;
-        state.message = `Stage ${state.stage + 1}: keep running and shooting.`;
+        state.message = `Planet sector ${state.stage + 1}: robot signals ahead.`;
       }
       player.x = clamp(player.x, 70, FINISH_X);
       for (const cover of covers) {
@@ -290,7 +290,7 @@ export default function RogueBlaster() {
       }
       if (player.x >= FINISH_X - 20 && !stageAlive()) {
         state.won = true;
-        state.message = "You made it through the whole run!";
+        state.message = "Planet robot base cleared!";
       }
 
       for (const enemy of state.enemies) updateEnemy(enemy, dt);
@@ -349,25 +349,32 @@ export default function RogueBlaster() {
       ctx.translate(x, y);
       ctx.scale(aimingRight ? 1 : -1, 1);
       if (state.player.invuln > 0) ctx.globalAlpha = 0.55 + Math.sin(performance.now() * 0.04) * 0.28;
-      ctx.fillStyle = "#2563eb";
-      ctx.fillRect(-13, -23, 26, 34);
-      ctx.fillStyle = "#1e40af";
-      ctx.fillRect(-12, 10, 10, 21);
+      ctx.fillStyle = "#e2e8f0";
+      ctx.fillRect(-15, -24, 30, 36);
+      ctx.fillStyle = "#38bdf8";
+      ctx.fillRect(-10, -18, 20, 16);
+      ctx.fillStyle = "#94a3b8";
+      ctx.fillRect(-13, 10, 10, 21);
       ctx.fillRect(3, 10, 10, 21);
-      ctx.fillStyle = "#fed7aa";
+      ctx.fillStyle = "#cbd5e1";
       ctx.beginPath();
-      ctx.arc(0, -39, 15, 0, Math.PI * 2);
+      ctx.arc(0, -41, 18, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = "#111827";
-      ctx.fillRect(-14, -52, 28, 10);
-      ctx.fillStyle = "#facc15";
+      ctx.fillStyle = "rgba(14,165,233,0.65)";
+      ctx.beginPath();
+      ctx.ellipse(4, -41, 11, 8, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#f8fafc";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, -41, 18, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = "#67e8f9";
       ctx.fillRect(10, -25, 42, 12);
       ctx.fillStyle = "#0f172a";
-      ctx.fillRect(43, -22, 18, 6);
-      ctx.fillStyle = "#111827";
-      ctx.beginPath();
-      ctx.arc(6, -41, 2.2, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.fillRect(43, -22, 20, 6);
+      ctx.fillStyle = "#fef08a";
+      ctx.fillRect(50, -24, 8, 2);
       ctx.restore();
     };
 
@@ -375,67 +382,139 @@ export default function RogueBlaster() {
       if (enemy.hp <= 0) return;
       ctx.save();
       ctx.translate(enemy.x, enemy.y);
-      ctx.fillStyle = enemy.hitFlash > 0 ? "#ffffff" : enemyColors[enemy.kind];
-      if (enemy.kind === "shooter") ctx.fillRect(-enemy.r, -enemy.r, enemy.r * 2, enemy.r * 2);
-      else {
-        ctx.beginPath();
-        ctx.arc(0, 0, enemy.r, 0, Math.PI * 2);
-        ctx.fill();
-      }
+      const color = enemy.hitFlash > 0 ? "#ffffff" : enemyColors[enemy.kind];
+      ctx.fillStyle = "#0f172a";
+      ctx.fillRect(-enemy.r * 0.85, -enemy.r * 0.7, enemy.r * 1.7, enemy.r * 1.45);
+      ctx.fillStyle = color;
+      ctx.fillRect(-enemy.r * 0.68, -enemy.r * 0.52, enemy.r * 1.36, enemy.r * 1.04);
+      ctx.strokeStyle = "rgba(226,232,240,0.8)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(-enemy.r * 0.68, -enemy.r * 0.52, enemy.r * 1.36, enemy.r * 1.04);
       ctx.fillStyle = "#020617";
+      ctx.fillRect(-enemy.r * 0.55, -enemy.r * 0.3, enemy.r * 1.1, enemy.r * 0.3);
+      ctx.fillStyle = enemy.kind === "boss" ? "#fef08a" : "#67e8f9";
+      ctx.fillRect(-enemy.r * 0.38, -enemy.r * 0.22, enemy.r * 0.24, enemy.r * 0.14);
+      ctx.fillRect(enemy.r * 0.14, -enemy.r * 0.22, enemy.r * 0.24, enemy.r * 0.14);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.arc(-enemy.r * 0.28, -enemy.r * 0.18, 3, 0, Math.PI * 2);
-      ctx.arc(enemy.r * 0.28, -enemy.r * 0.18, 3, 0, Math.PI * 2);
+      ctx.moveTo(-enemy.r * 0.35, -enemy.r * 0.7);
+      ctx.lineTo(-enemy.r * 0.62, -enemy.r * 1.08);
+      ctx.moveTo(enemy.r * 0.35, -enemy.r * 0.7);
+      ctx.lineTo(enemy.r * 0.62, -enemy.r * 1.08);
+      ctx.stroke();
+      ctx.fillStyle = "#e2e8f0";
+      ctx.beginPath();
+      ctx.arc(-enemy.r * 0.62, -enemy.r * 1.1, 3.5, 0, Math.PI * 2);
+      ctx.arc(enemy.r * 0.62, -enemy.r * 1.1, 3.5, 0, Math.PI * 2);
       ctx.fill();
+      ctx.fillStyle = "#334155";
+      ctx.fillRect(-enemy.r * 0.9, enemy.r * 0.75, enemy.r * 0.55, enemy.r * 0.25);
+      ctx.fillRect(enemy.r * 0.35, enemy.r * 0.75, enemy.r * 0.55, enemy.r * 0.25);
       if (enemy.kind === "shooter" || enemy.kind === "boss") {
         ctx.fillStyle = "#111827";
-        ctx.fillRect(-enemy.r - 28, -6, 34, 10);
+        ctx.fillRect(-enemy.r - 32, -6, 38, 10);
+        ctx.fillStyle = "#67e8f9";
+        ctx.fillRect(-enemy.r - 36, -4, 8, 6);
+      }
+      if (enemy.kind === "boss") {
+        ctx.strokeStyle = "#fef08a";
+        ctx.lineWidth = 4;
+        ctx.strokeRect(-enemy.r, -enemy.r * 0.86, enemy.r * 2, enemy.r * 1.7);
       }
       ctx.restore();
       ctx.fillStyle = "rgba(15,23,42,0.8)";
-      ctx.fillRect(enemy.x - enemy.r, enemy.y - enemy.r - 13, enemy.r * 2, 5);
-      ctx.fillStyle = "#bbf7d0";
-      ctx.fillRect(enemy.x - enemy.r, enemy.y - enemy.r - 13, enemy.r * 2 * Math.max(0, enemy.hp / enemy.maxHp), 5);
+      ctx.fillRect(enemy.x - enemy.r, enemy.y - enemy.r - 17, enemy.r * 2, 5);
+      ctx.fillStyle = "#67e8f9";
+      ctx.fillRect(enemy.x - enemy.r, enemy.y - enemy.r - 17, enemy.r * 2 * Math.max(0, enemy.hp / enemy.maxHp), 5);
     };
 
     const draw = () => {
       const w = window.innerWidth;
       const h = window.innerHeight;
       const sky = ctx.createLinearGradient(0, 0, 0, h);
-      sky.addColorStop(0, "#0f172a");
-      sky.addColorStop(0.55, "#1e293b");
-      sky.addColorStop(1, "#111827");
+      sky.addColorStop(0, "#190b3d");
+      sky.addColorStop(0.45, "#312e81");
+      sky.addColorStop(1, "#4c1d95");
       ctx.fillStyle = sky;
       ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = "rgba(255,255,255,0.75)";
+      for (let i = 0; i < 70; i += 1) {
+        ctx.fillRect((i * 137 - state.cameraX * 0.08) % (w + 80), (i * 71) % 250 + 18, 1.5 + (i % 3), 1.5 + (i % 3));
+      }
+      ctx.fillStyle = "rgba(125,211,252,0.22)";
+      ctx.beginPath();
+      ctx.arc(w - 145 - state.cameraX * 0.03, 90, 54, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(251,191,36,0.18)";
+      ctx.beginPath();
+      ctx.arc(135 - state.cameraX * 0.018, 132, 88, 0, Math.PI * 2);
+      ctx.fill();
       ctx.save();
       ctx.translate(-state.cameraX, 0);
 
       for (let x = -200; x < FINISH_X + 600; x += 360) {
-        ctx.fillStyle = x % 720 === 0 ? "#334155" : "#475569";
-        ctx.fillRect(x, 150, 220, GROUND_Y - 150);
-        ctx.fillStyle = "rgba(250,204,21,0.45)";
-        for (let yy = 190; yy < GROUND_Y - 30; yy += 55) for (let xx = x + 26; xx < x + 190; xx += 54) ctx.fillRect(xx, yy, 24, 24);
+        ctx.fillStyle = x % 720 === 0 ? "#4c1d95" : "#5b21b6";
+        ctx.beginPath();
+        ctx.moveTo(x, GROUND_Y);
+        ctx.lineTo(x + 70, 230);
+        ctx.lineTo(x + 145, GROUND_Y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = "rgba(103,232,249,0.55)";
+        ctx.fillRect(x + 86, 285, 14, 115);
+        ctx.fillStyle = "#67e8f9";
+        ctx.beginPath();
+        ctx.moveTo(x + 205, GROUND_Y);
+        ctx.lineTo(x + 245, GROUND_Y - 140);
+        ctx.lineTo(x + 285, GROUND_Y);
+        ctx.closePath();
+        ctx.fill();
       }
-      ctx.fillStyle = "#1f2937";
-      ctx.fillRect(-200, GROUND_Y, FINISH_X + 800, 160);
-      ctx.fillStyle = "#facc15";
+      ctx.fillStyle = "#581c87";
+      ctx.beginPath();
+      ctx.moveTo(-200, GROUND_Y);
+      for (let x = -200; x < FINISH_X + 800; x += 120) ctx.lineTo(x, GROUND_Y + Math.sin(x * 0.012) * 18);
+      ctx.lineTo(FINISH_X + 800, GROUND_Y + 170);
+      ctx.lineTo(-200, GROUND_Y + 170);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "rgba(103,232,249,0.35)";
       for (let x = 0; x < FINISH_X + 500; x += 150) ctx.fillRect(x, GROUND_Y + 58, 70, 8);
+      ctx.fillStyle = "rgba(15,23,42,0.45)";
+      for (let x = 40; x < FINISH_X + 500; x += 330) {
+        ctx.beginPath();
+        ctx.ellipse(x, GROUND_Y + 25, 62, 12, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
       for (let i = 1; i <= STAGES; i += 1) {
         const x = i * STAGE_W;
-        ctx.fillStyle = stageAlive() && i === state.stage + 1 ? "rgba(239,68,68,0.7)" : "rgba(34,197,94,0.38)";
-        ctx.fillRect(x - 12, 120, 24, GROUND_Y - 120);
+        const locked = stageAlive() && i === state.stage + 1;
+        const beam = ctx.createLinearGradient(x - 14, 120, x + 14, GROUND_Y);
+        beam.addColorStop(0, locked ? "rgba(239,68,68,0.25)" : "rgba(34,211,238,0.14)");
+        beam.addColorStop(0.5, locked ? "rgba(248,113,113,0.75)" : "rgba(34,211,238,0.5)");
+        beam.addColorStop(1, locked ? "rgba(239,68,68,0.25)" : "rgba(34,211,238,0.14)");
+        ctx.fillStyle = beam;
+        ctx.fillRect(x - 14, 120, 28, GROUND_Y - 120);
         ctx.fillStyle = "#e2e8f0";
         ctx.font = "900 20px Inter, sans-serif";
         ctx.textAlign = "center";
-        ctx.fillText(i === STAGES ? "FINAL" : `STAGE ${i + 1}`, x, 105);
+        ctx.fillText(i === STAGES ? "ROBOT CORE" : `SECTOR ${i + 1}`, x, 105);
       }
 
       for (const cover of covers) {
-        ctx.fillStyle = "#78350f";
+        const crate = ctx.createLinearGradient(cover.x, cover.y, cover.x + cover.w, cover.y + cover.h);
+        crate.addColorStop(0, "#0f172a");
+        crate.addColorStop(0.5, "#334155");
+        crate.addColorStop(1, "#111827");
+        ctx.fillStyle = crate;
         ctx.fillRect(cover.x, cover.y, cover.w, cover.h);
-        ctx.strokeStyle = "rgba(255,255,255,0.2)";
+        ctx.strokeStyle = "rgba(103,232,249,0.8)";
+        ctx.lineWidth = 2;
         ctx.strokeRect(cover.x + 4, cover.y + 4, cover.w - 8, cover.h - 8);
+        ctx.fillStyle = "rgba(103,232,249,0.25)";
+        ctx.fillRect(cover.x + 12, cover.y + 12, cover.w - 24, 8);
       }
       for (const pickup of state.pickups) {
         ctx.fillStyle = pickup.kind === "heart" ? "#fb7185" : "#38bdf8";
@@ -471,17 +550,17 @@ export default function RogueBlaster() {
         ctx.textAlign = "center";
         ctx.fillStyle = "white";
         ctx.font = "900 54px Inter, sans-serif";
-        ctx.fillText(state.won ? "Run Complete!" : state.gameOver ? "Knocked Out" : "Rough Run", w / 2, h / 2 - 72);
+        ctx.fillText(state.won ? "Planet Cleared!" : state.gameOver ? "Suit Down" : "Rough Run: Planet Robots", w / 2, h / 2 - 72);
         ctx.fillStyle = "#fde68a";
         ctx.font = "900 20px Inter, sans-serif";
-        ctx.fillText(state.won || state.gameOver ? `Score ${state.score.toLocaleString()} • Kills ${state.kills}` : "A flat run-through shooting game — no parkour, just run and gun", w / 2, h / 2 - 24);
+        ctx.fillText(state.won || state.gameOver ? `Score ${state.score.toLocaleString()} • Robots ${state.kills}` : "Alien planet run-through shooter — robot ambushes, force gates, plasma crates", w / 2, h / 2 - 24);
         ctx.fillStyle = "#cbd5e1";
         ctx.font = "800 16px Inter, sans-serif";
         ctx.fillText("A/D move • W/↑ jump • Mouse aim • Click/Space shoot • R reload/restart", w / 2, h / 2 + 24);
       }
 
       if (hudRef.current) {
-        hudRef.current.innerHTML = `<div><span>Stage</span><strong>${state.stage + 1}/${STAGES}</strong></div><div><span>HP</span><strong>${Math.round(state.player.hp)}/${state.player.maxHp}</strong></div><div><span>Ammo</span><strong>${state.player.reload > 0 ? "Reload" : `${state.player.ammo}/${state.player.maxAmmo}`}</strong></div><div><span>Kills</span><strong>${state.kills}</strong></div><div><span>Score</span><strong>${state.score.toLocaleString()}</strong></div><div><span>Goal</span><strong>${stageAlive() ? "Clear" : "Run"}</strong></div>`;
+        hudRef.current.innerHTML = `<div><span>Sector</span><strong>${state.stage + 1}/${STAGES}</strong></div><div><span>Suit</span><strong>${Math.round(state.player.hp)}/${state.player.maxHp}</strong></div><div><span>Cells</span><strong>${state.player.reload > 0 ? "Reload" : `${state.player.ammo}/${state.player.maxAmmo}`}</strong></div><div><span>Robots</span><strong>${state.kills}</strong></div><div><span>Score</span><strong>${state.score.toLocaleString()}</strong></div><div><span>Gate</span><strong>${stageAlive() ? "Locked" : "Open"}</strong></div>`;
       }
     };
 
@@ -511,11 +590,11 @@ export default function RogueBlaster() {
       <canvas ref={canvasRef} className="absolute inset-0 cursor-crosshair" />
       <div className="pointer-events-none absolute left-4 right-4 top-4 z-10 flex flex-wrap items-start justify-between gap-3">
         <div className="rounded-3xl border border-white/10 bg-black/50 px-5 py-4 shadow-2xl backdrop-blur-md">
-          <p className="text-xs font-black uppercase tracking-[0.28em] text-yellow-200">Rough Run</p>
-          <h1 className="text-2xl font-black">Run-Through Shooter</h1>
-          <p className="mt-1 text-sm font-bold text-slate-300">Side-scrolling run-and-gun. W or ↑ jumps; clear enemies to pass each blocker.</p>
+          <p className="text-xs font-black uppercase tracking-[0.28em] text-cyan-200">Rough Run</p>
+          <h1 className="text-2xl font-black">Planet Robot Siege</h1>
+          <p className="mt-1 text-sm font-bold text-slate-300">Alien side-scrolling run-and-gun. W or ↑ jumps; clear robot force gates.</p>
         </div>
-        <Link className="pointer-events-auto rounded-full bg-white px-5 py-3 text-xs font-black uppercase tracking-[0.2em] text-slate-950 shadow-xl transition hover:-translate-y-1 hover:bg-yellow-100" to="/">
+        <Link className="pointer-events-auto rounded-full bg-white px-5 py-3 text-xs font-black uppercase tracking-[0.2em] text-slate-950 shadow-xl transition hover:-translate-y-1 hover:bg-cyan-100" to="/">
           Back to Lobby
         </Link>
       </div>
