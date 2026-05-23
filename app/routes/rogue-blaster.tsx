@@ -226,15 +226,15 @@ export default function RogueBlaster() {
       const dx = state.player.x - enemy.x;
       const distance = Math.abs(dx);
       const dir = Math.sign(dx) || -1;
-      const speed = enemy.kind === "runner" ? 185 : enemy.kind === "punk" ? 122 : enemy.kind === "shooter" ? 92 : enemy.kind === "heavy" ? 72 : 88;
-      const desiredDistance = enemy.kind === "boss" ? 54 : enemy.kind === "heavy" ? 42 : 30;
-      if (distance > desiredDistance) enemy.x += dir * speed * dt;
-      enemy.x = clamp(enemy.x, enemy.stage * STAGE_W + 240, (enemy.stage + 1) * STAGE_W - 80);
+      const speed = enemy.kind === "runner" ? 205 : enemy.kind === "punk" ? 142 : enemy.kind === "shooter" ? 118 : enemy.kind === "heavy" ? 86 : 104;
+      enemy.x += dir * speed * dt;
+      enemy.x = clamp(enemy.x, enemy.stage * STAGE_W + 60, (enemy.stage + 1) * STAGE_W - 80);
       enemy.y = GROUND_Y - enemy.r;
 
-      if (distance < enemy.r + PLAYER_R + 8) {
+      const touching = Math.abs(state.player.x - enemy.x) < enemy.r + PLAYER_R + 8;
+      if (touching) {
         hurtPlayer(enemy.kind === "boss" ? 22 : enemy.kind === "heavy" ? 16 : enemy.kind === "shooter" ? 10 : 9);
-        enemy.x -= dir * 26;
+        enemy.x += dir * 4;
       }
       if ((enemy.kind === "shooter" || enemy.kind === "boss") && enemy.cooldown <= 0 && distance < 700) {
         const shots = enemy.kind === "boss" ? [-0.1, 0, 0.1] : [0];
