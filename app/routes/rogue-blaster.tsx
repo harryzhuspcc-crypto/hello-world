@@ -5,84 +5,65 @@ import type { Route } from "./+types/rogue-blaster";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Rough Run: Planet Robots | Harry's Game Center" },
+    { title: "Rough Run: Robot Silius | Harry's Game Center" },
     {
       name: "description",
-      content: "A run-through alien-planet shooting game with a boy, a blaster, robot attackers, force gates, and bosses.",
+      content: "A long-stage side-scrolling run-and-gun with jumping, ducking, robots, ground hazards, and a helicopter boss.",
     },
   ];
 }
 
-type Vec = { x: number; y: number };
-type EnemyKind = "punk" | "runner" | "shooter" | "heavy" | "boss";
-type Enemy = Vec & { kind: EnemyKind; vx: number; hp: number; maxHp: number; r: number; cooldown: number; active: boolean; stage: number; hitFlash: number };
-type Bullet = Vec & { vx: number; vy: number; damage: number; life: number; enemy: boolean; size: number };
-type Pickup = Vec & { kind: "heart" | "ammo"; life: number };
-type Particle = Vec & { vx: number; vy: number; life: number; color: string; size: number };
-type Cover = { x: number; y: number; w: number; h: number };
+type Bullet = { x: number; y: number; vx: number; vy?: number; life: number; damage: number; enemy: boolean; low: boolean };
+type Robot = { x: number; y: number; hp: number; maxHp: number; speed: number; active: boolean; flash: number; shootTimer: number; type: "walker" | "gunner" | "tank" };
+type Crawler = { x: number; y: number; hp: number; dead: boolean; flash: number };
+type Alien = { x: number; y: number; vx: number; vy: number; hp: number; flash: number; active: boolean };
+type Particle = { x: number; y: number; vx: number; vy: number; life: number; color: string; size: number };
+type Cannon = { ox: number; oy: number; hp: number; maxHp: number; dead: boolean; flash: number; cooldown: number };
 
-const GROUND_Y = 470;
-const WORLD_W = 10400;
-const STAGE_W = 1450;
-const STAGES = 7;
-const PLAYER_R = 22;
-const FINISH_X = STAGE_W * STAGES + 240;
-
-const enemyColors: Record<EnemyKind, string> = {
-  punk: "#22d3ee",
-  runner: "#f97316",
-  shooter: "#a78bfa",
-  heavy: "#94a3b8",
-  boss: "#ef4444",
-};
-
-const covers: Cover[] = Array.from({ length: STAGES }, (_, stage) => [
-  { x: stage * STAGE_W + 520, y: GROUND_Y - 52, w: 92, h: 52 },
-  { x: stage * STAGE_W + 930, y: GROUND_Y - 76, w: 120, h: 76 },
-]).flat();
+const GROUND_Y = 500;
+const WORLD_W = 5200;
+const PLAYER_W = 34;
+const PLAYER_H = 76;
+const DUCK_H = 44;
+const BOSS_X = 4450;
+const FINISH_X = 5050;
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
-function dist(a: Vec, b: Vec) {
-  return Math.hypot(a.x - b.x, a.y - b.y);
+function rectsOverlap(a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 }
 
-function bulletHitsCover(bullet: Bullet) {
-  return covers.some((cover) => bullet.x > cover.x && bullet.x < cover.x + cover.w && bullet.y > cover.y && bullet.y < cover.y + cover.h);
+function makeRobots(): Robot[] {
+  return [
+    { x: 520, y: GROUND_Y, hp: 5, maxHp: 5, speed: 48, active: false, flash: 0, shootTimer: 1.6, type: "walker" },
+    { x: 820, y: GROUND_Y, hp: 7, maxHp: 7, speed: 38, active: false, flash: 0, shootTimer: 1.1, type: "gunner" },
+    { x: 1240, y: GROUND_Y, hp: 8, maxHp: 8, speed: 54, active: false, flash: 0, shootTimer: 1.8, type: "walker" },
+    { x: 1640, y: GROUND_Y, hp: 14, maxHp: 14, speed: 27, active: false, flash: 0, shootTimer: 1.4, type: "tank" },
+    { x: 2050, y: GROUND_Y, hp: 8, maxHp: 8, speed: 58, active: false, flash: 0, shootTimer: 1.5, type: "walker" },
+    { x: 2380, y: GROUND_Y, hp: 9, maxHp: 9, speed: 40, active: false, flash: 0, shootTimer: 0.8, type: "gunner" },
+    { x: 2820, y: GROUND_Y, hp: 15, maxHp: 15, speed: 30, active: false, flash: 0, shootTimer: 1.2, type: "tank" },
+    { x: 3180, y: GROUND_Y, hp: 9, maxHp: 9, speed: 58, active: false, flash: 0, shootTimer: 1.6, type: "walker" },
+    { x: 3510, y: GROUND_Y, hp: 10, maxHp: 10, speed: 42, active: false, flash: 0, shootTimer: 1.0, type: "gunner" },
+    { x: 3860, y: GROUND_Y, hp: 16, maxHp: 16, speed: 34, active: false, flash: 0, shootTimer: 1.1, type: "tank" },
+  ];
 }
 
-function createEnemy(stage: number, offset: number, kind: EnemyKind): Enemy {
-  const baseX = stage * STAGE_W + offset;
-  const stats = {
-    punk: { hp: 24 + stage * 5, r: 19 },
-    runner: { hp: 18 + stage * 4, r: 17 },
-    shooter: { hp: 28 + stage * 5, r: 19 },
-    heavy: { hp: 62 + stage * 11, r: 27 },
-    boss: { hp: 260 + stage * 55, r: 45 },
-  }[kind];
-  return { x: baseX, y: GROUND_Y - stats.r, kind, vx: 0, hp: stats.hp, maxHp: stats.hp, r: stats.r, cooldown: 0.5 + Math.random(), active: false, stage, hitFlash: 0 };
+function robotRadius(robot: Robot) {
+  return robot.type === "tank" ? 28 : robot.type === "gunner" ? 21 : 19;
 }
 
-function makeEnemies() {
-  const enemies: Enemy[] = [];
-  for (let stage = 0; stage < STAGES; stage += 1) {
-    enemies.push(createEnemy(stage, 620, stage % 2 ? "runner" : "punk"));
-    enemies.push(createEnemy(stage, 860, "shooter"));
-    enemies.push(createEnemy(stage, 1110, stage > 1 ? "heavy" : "punk"));
-    enemies.push(createEnemy(stage, 1280, stage % 3 === 0 ? "shooter" : "runner"));
-    if (stage === STAGES - 1) enemies.push(createEnemy(stage, 1360, "boss"));
-    else if (stage > 0 && stage % 2 === 0) enemies.push(createEnemy(stage, 1340, "heavy"));
-  }
-  return enemies;
+function makeCrawlers(): Crawler[] {
+  return [700, 1080, 1480, 1910, 2240, 2660, 3030, 3360, 3720, 4100].map((x) => ({ x, y: GROUND_Y - 20, hp: 2, dead: false, flash: 0 }));
 }
 
-function pushParticles(particles: Particle[], x: number, y: number, color: string, count: number) {
+function burst(particles: Particle[], x: number, y: number, color: string, count: number) {
   for (let i = 0; i < count; i += 1) {
     const angle = Math.random() * Math.PI * 2;
     const speed = 80 + Math.random() * 240;
-    particles.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: 0.28 + Math.random() * 0.42, color, size: 2 + Math.random() * 4 });
+    particles.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: 0.25 + Math.random() * 0.45, color, size: 2 + Math.random() * 4 });
   }
 }
 
@@ -96,21 +77,28 @@ export default function RogueBlaster() {
     if (!canvas || !ctx) return;
 
     const keys = new Set<string>();
-    const mouse = { x: window.innerWidth * 0.72, y: window.innerHeight * 0.55, down: false };
     const state = {
-      player: { x: 90, y: GROUND_Y - PLAYER_R, vx: 0, vy: 0, hp: 100, maxHp: 100, ammo: 30, maxAmmo: 30, reload: 0, cooldown: 0, invuln: 0 },
-      cameraX: 0,
-      enemies: makeEnemies(),
+      player: { x: 90, y: GROUND_Y - PLAYER_H, vy: 0, hp: 100, maxHp: 100, facing: 1, duck: false, cooldown: 0, invuln: 0, ammo: 36, maxAmmo: 36, reload: 0 },
+      robots: makeRobots(),
+      crawlers: makeCrawlers(),
+      aliens: [] as Alien[],
       bullets: [] as Bullet[],
-      pickups: [] as Pickup[],
       particles: [] as Particle[],
-      stage: 0,
-      score: 0,
-      kills: 0,
+      cameraX: 0,
       started: false,
       gameOver: false,
       won: false,
-      message: "Run across the alien planet. Shoot robot attackers and open force gates.",
+      score: 0,
+      kills: 0,
+      bossStarted: false,
+      bossPhase: "drop" as "drop" | "attack" | "dead",
+      helicopter: { x: BOSS_X + 430, y: 135, targetY: 135, dropTimer: 1.0, aliensDropped: 0, aliensKilled: 0 },
+      cannons: [
+        { ox: -88, oy: 42, hp: 7, maxHp: 7, dead: false, flash: 0, cooldown: 0.8 },
+        { ox: 0, oy: 58, hp: 9, maxHp: 9, dead: false, flash: 0, cooldown: 1.2 },
+        { ox: 88, oy: 42, hp: 7, maxHp: 7, dead: false, flash: 0, cooldown: 1.6 },
+      ] as Cannon[],
+      message: "Run, jump, duck, and shoot through one long robot stage.",
       last: performance.now(),
     };
 
@@ -126,61 +114,65 @@ export default function RogueBlaster() {
     window.addEventListener("resize", resize);
 
     const reset = () => {
-      state.player = { x: 90, y: GROUND_Y - PLAYER_R, vx: 0, vy: 0, hp: 100, maxHp: 100, ammo: 30, maxAmmo: 30, reload: 0, cooldown: 0, invuln: 0 };
-      state.cameraX = 0;
-      state.enemies = makeEnemies();
+      state.player = { x: 90, y: GROUND_Y - PLAYER_H, vy: 0, hp: 100, maxHp: 100, facing: 1, duck: false, cooldown: 0, invuln: 0, ammo: 36, maxAmmo: 36, reload: 0 };
+      state.robots = makeRobots();
+      state.crawlers = makeCrawlers();
+      state.aliens = [];
       state.bullets = [];
-      state.pickups = [];
       state.particles = [];
-      state.stage = 0;
-      state.score = 0;
-      state.kills = 0;
+      state.cameraX = 0;
       state.started = true;
       state.gameOver = false;
       state.won = false;
-      state.message = "Run across the alien planet and clear each robot blockade.";
+      state.score = 0;
+      state.kills = 0;
+      state.bossStarted = false;
+      state.bossPhase = "drop";
+      state.helicopter = { x: BOSS_X + 430, y: 135, targetY: 135, dropTimer: 1.0, aliensDropped: 0, aliensKilled: 0 };
+      state.cannons = [
+        { ox: -88, oy: 42, hp: 7, maxHp: 7, dead: false, flash: 0, cooldown: 0.8 },
+        { ox: 0, oy: 58, hp: 9, maxHp: 9, dead: false, flash: 0, cooldown: 1.2 },
+        { ox: 88, oy: 42, hp: 7, maxHp: 7, dead: false, flash: 0, cooldown: 1.6 },
+      ];
+      state.message = "Go forward. Duck to shoot ground mines. Jump-shoot boss cannons.";
     };
 
-    const stageEnd = () => (state.stage + 1) * STAGE_W;
-    const stageAlive = () => state.enemies.some((enemy) => enemy.hp > 0 && enemy.stage === state.stage);
-
-    const shoot = () => {
-      if (!state.started || state.gameOver || state.won || state.player.cooldown > 0 || state.player.reload > 0) return;
-      if (state.player.ammo <= 0) {
-        state.player.reload = 1.1;
-        state.message = "Reloading!";
-        return;
+    const playerRect = () => ({ x: state.player.x - PLAYER_W / 2, y: state.player.y, w: PLAYER_W, h: state.player.duck ? DUCK_H : PLAYER_H });
+    const hurtPlayer = (amount: number) => {
+      if (state.player.invuln > 0 || state.gameOver || state.won) return;
+      state.player.hp -= amount;
+      state.player.invuln = 0.45;
+      burst(state.particles, state.player.x, state.player.y + 24, "#fecaca", 14);
+      if (state.player.hp <= 0) {
+        state.player.hp = 0;
+        state.gameOver = true;
+        state.message = "Destroyed! Press R or click to restart.";
       }
-      const sx = state.player.x - state.cameraX;
-      const sy = state.player.y;
-      const angle = Math.atan2(mouse.y - sy, mouse.x - sx);
-      state.bullets.push({ x: state.player.x + Math.cos(angle) * 24, y: state.player.y + Math.sin(angle) * 18, vx: Math.cos(angle) * 850, vy: Math.sin(angle) * 850, damage: 18, life: 0.95, enemy: false, size: 5 });
-      state.player.cooldown = 0.13;
-      state.player.ammo -= 1;
     };
 
     const reload = () => {
       if (state.player.reload <= 0 && state.player.ammo < state.player.maxAmmo) {
-        state.player.reload = 1.15;
-        state.message = "Reloading!";
+        state.player.reload = 1.05;
+        state.message = "Reloading cells.";
       }
     };
 
-    const hurtPlayer = (amount: number) => {
-      if (state.player.invuln > 0) return;
-      state.player.hp -= amount;
-      state.player.invuln = 0.45;
-      pushParticles(state.particles, state.player.x, state.player.y, "#fecaca", 16);
-      if (state.player.hp <= 0) {
-        state.player.hp = 0;
-        state.gameOver = true;
-        state.message = "Knocked out! Press R or click to restart.";
+    const shoot = () => {
+      if (!state.started || state.gameOver || state.won || state.player.cooldown > 0 || state.player.reload > 0) return;
+      if (state.player.ammo <= 0) {
+        reload();
+        return;
       }
+      const low = state.player.duck;
+      const y = state.player.y + (low ? 30 : 28);
+      state.bullets.push({ x: state.player.x + state.player.facing * 24, y, vx: state.player.facing * 760, life: 0.9, damage: 1, enemy: false, low });
+      state.player.cooldown = 0.12;
+      state.player.ammo -= 1;
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
       keys.add(event.code);
-      if (event.code === "Space") {
+      if (event.code === "Space" || event.code === "KeyF") {
         event.preventDefault();
         if (!state.started || state.gameOver || state.won) reset();
         else shoot();
@@ -190,294 +182,381 @@ export default function RogueBlaster() {
         if (state.started && !state.gameOver && !state.won) reload();
         else reset();
       }
-      if ((event.code === "KeyW" || event.code === "ArrowUp") && state.started && !state.gameOver && !state.won && state.player.y >= GROUND_Y - PLAYER_R - 1) {
+      if ((event.code === "KeyW" || event.code === "ArrowUp") && state.started && !state.gameOver && !state.won && state.player.y >= GROUND_Y - PLAYER_H - 1) {
         event.preventDefault();
-        state.player.vy = -650;
+        state.player.vy = -660;
       }
       if (event.code === "Enter" && (!state.started || state.gameOver || state.won)) reset();
     };
     const onKeyUp = (event: KeyboardEvent) => keys.delete(event.code);
-    const onPointerMove = (event: PointerEvent) => {
-      mouse.x = event.clientX;
-      mouse.y = event.clientY;
-    };
-    const onPointerDown = (event: PointerEvent) => {
-      mouse.down = true;
-      mouse.x = event.clientX;
-      mouse.y = event.clientY;
+    const onPointerDown = () => {
       if (!state.started || state.gameOver || state.won) reset();
       else shoot();
     };
-    const onPointerUp = () => {
-      mouse.down = false;
-    };
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
-    window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("pointerup", onPointerUp);
 
-    const updateEnemy = (enemy: Enemy, dt: number) => {
-      if (enemy.hp <= 0) return;
-      if (enemy.x - state.player.x < 760) enemy.active = true;
-      if (!enemy.active) return;
-      enemy.cooldown -= dt;
-      enemy.hitFlash = Math.max(0, enemy.hitFlash - dt * 5);
-      const dx = state.player.x - enemy.x;
-      const distance = Math.abs(dx);
-      const dir = Math.sign(dx) || -1;
-      const speed = enemy.kind === "runner" ? 205 : enemy.kind === "punk" ? 142 : enemy.kind === "shooter" ? 118 : enemy.kind === "heavy" ? 86 : 104;
-      enemy.x += dir * speed * dt;
-      enemy.x = clamp(enemy.x, enemy.stage * STAGE_W + 60, (enemy.stage + 1) * STAGE_W - 80);
-      enemy.y = GROUND_Y - enemy.r;
-
-      const touching = Math.abs(state.player.x - enemy.x) < enemy.r + PLAYER_R + 8;
-      if (touching) {
-        hurtPlayer(enemy.kind === "boss" ? 22 : enemy.kind === "heavy" ? 16 : enemy.kind === "shooter" ? 10 : 9);
-        enemy.x += dir * 4;
-      }
-      if ((enemy.kind === "shooter" || enemy.kind === "boss") && enemy.cooldown <= 0 && distance < 700) {
-        const shots = enemy.kind === "boss" ? [-0.1, 0, 0.1] : [0];
-        for (const offset of shots) {
-          const angle = Math.atan2(state.player.y - enemy.y, state.player.x - enemy.x) + offset;
-          state.bullets.push({ x: enemy.x + Math.cos(angle) * enemy.r, y: enemy.y, vx: Math.cos(angle) * 440, vy: Math.sin(angle) * 440, damage: enemy.kind === "boss" ? 14 : 8, life: 1.45, enemy: true, size: enemy.kind === "boss" ? 7 : 5 });
+    const updateRobots = (dt: number) => {
+      const p = state.player;
+      for (const robot of state.robots) {
+        if (robot.hp <= 0) continue;
+        robot.flash = Math.max(0, robot.flash - dt * 7);
+        if (robot.x - p.x < 620) robot.active = true;
+        if (!robot.active) continue;
+        const dir = Math.sign(p.x - robot.x) || -1;
+        robot.x += dir * robot.speed * dt;
+        robot.y = GROUND_Y;
+        robot.shootTimer -= dt;
+        if ((robot.type === "gunner" || robot.type === "tank") && Math.abs(robot.x - p.x) < 520 && robot.shootTimer <= 0) {
+          state.bullets.push({ x: robot.x - dir * 22, y: GROUND_Y - 48, vx: -dir * 430, life: 1.1, damage: robot.type === "tank" ? 11 : 7, enemy: true, low: false });
+          robot.shootTimer = robot.type === "tank" ? 1.05 : 1.45;
         }
-        enemy.cooldown = enemy.kind === "boss" ? 0.9 : 1.4 + Math.random() * 0.5;
+        const radius = robotRadius(robot);
+        if (rectsOverlap(playerRect(), { x: robot.x - radius, y: GROUND_Y - radius * 2, w: radius * 2, h: radius * 2 })) hurtPlayer(robot.type === "tank" ? 16 : 9);
+      }
+    };
+
+    const startBoss = () => {
+      if (state.bossStarted) return;
+      state.bossStarted = true;
+      state.message = "Boss: shoot down every dropped alien first!";
+      state.player.ammo = state.player.maxAmmo;
+    };
+
+    const updateBoss = (dt: number) => {
+      if (!state.bossStarted || state.bossPhase === "dead") return;
+      const heli = state.helicopter;
+      heli.y += (heli.targetY - heli.y) * 0.04;
+      if (state.bossPhase === "drop") {
+        heli.dropTimer -= dt;
+        if (heli.aliensDropped < 10 && heli.dropTimer <= 0) {
+          state.aliens.push({ x: heli.x + (Math.random() - 0.5) * 140, y: heli.y + 70, vx: (Math.random() - 0.5) * 70, vy: 0, hp: 2, flash: 0, active: false });
+          heli.aliensDropped += 1;
+          heli.dropTimer = 0.75;
+        }
+        if (heli.aliensDropped >= 10 && state.aliens.every((alien) => alien.hp <= 0)) {
+          state.bossPhase = "attack";
+          heli.targetY = 245;
+          state.message = "Helicopter is descending. Jump and shoot the cannons!";
+        }
+      } else if (state.bossPhase === "attack") {
+        for (const cannon of state.cannons) {
+          if (cannon.dead) continue;
+          cannon.flash = Math.max(0, cannon.flash - dt * 8);
+          cannon.cooldown -= dt;
+          if (cannon.cooldown <= 0) {
+            const cx = heli.x + cannon.ox;
+            const cy = heli.y + cannon.oy;
+            const dx = state.player.x - cx;
+            const dy = state.player.y + 22 - cy;
+            const len = Math.hypot(dx, dy) || 1;
+            state.bullets.push({ x: cx, y: cy, vx: (dx / len) * 520, vy: (dy / len) * 520, life: 1.35, damage: 12, enemy: true, low: false });
+            cannon.cooldown = 0.7 + Math.random() * 0.45;
+          }
+        }
+        if (state.cannons.every((cannon) => cannon.dead)) {
+          state.bossPhase = "dead";
+          state.won = true;
+          state.score += 8000;
+          state.message = "All cannons destroyed — helicopter defeated!";
+          burst(state.particles, heli.x, heli.y, "#fde047", 80);
+        }
       }
     };
 
     const update = (dt: number) => {
       if (!state.started || state.gameOver || state.won) return;
-      const player = state.player;
-      player.cooldown = Math.max(0, player.cooldown - dt);
-      player.invuln = Math.max(0, player.invuln - dt);
-      if (player.reload > 0) {
-        player.reload -= dt;
-        if (player.reload <= 0) {
-          player.reload = 0;
-          player.ammo = player.maxAmmo;
+      const p = state.player;
+      p.cooldown = Math.max(0, p.cooldown - dt);
+      p.invuln = Math.max(0, p.invuln - dt);
+      p.duck = keys.has("KeyS") || keys.has("ArrowDown");
+      if (p.reload > 0) {
+        p.reload -= dt;
+        if (p.reload <= 0) {
+          p.reload = 0;
+          p.ammo = p.maxAmmo;
           state.message = "Reloaded.";
         }
       }
-      if (mouse.down) shoot();
 
       let move = 0;
       if (keys.has("KeyA") || keys.has("ArrowLeft")) move -= 1;
       if (keys.has("KeyD") || keys.has("ArrowRight")) move += 1;
-      const oldX = player.x;
-      player.x += move * 280 * dt;
-      player.vy += 1550 * dt;
-      player.y += player.vy * dt;
-      if (player.y > GROUND_Y - PLAYER_R) {
-        player.y = GROUND_Y - PLAYER_R;
-        player.vy = 0;
+      if (move !== 0) p.facing = move > 0 ? 1 : -1;
+      p.x += move * (p.duck ? 120 : 250) * dt;
+      p.vy += 1560 * dt;
+      p.y += p.vy * dt;
+      if (p.y > GROUND_Y - PLAYER_H) {
+        p.y = GROUND_Y - PLAYER_H;
+        p.vy = 0;
       }
-      const end = stageEnd();
-      if (stageAlive() && player.x > end - 170) {
-        player.x = end - 170;
-        state.message = "Robot force gate locked — clear the sector!";
-      }
-      if (!stageAlive() && player.x > end - 110 && state.stage < STAGES - 1) {
-        state.stage += 1;
-        player.hp = Math.min(player.maxHp, player.hp + 20);
-        player.ammo = player.maxAmmo;
-        state.message = `Planet sector ${state.stage + 1}: robot signals ahead.`;
-      }
-      player.x = clamp(player.x, 70, FINISH_X);
-      for (const cover of covers) {
-        if (player.x + PLAYER_R > cover.x && player.x - PLAYER_R < cover.x + cover.w && player.y + PLAYER_R > cover.y && player.y - PLAYER_R < cover.y + cover.h) player.x = oldX;
-      }
-      if (player.x >= FINISH_X - 20 && !stageAlive()) {
-        state.won = true;
-        state.message = "Planet robot base cleared!";
+      p.x = clamp(p.x, 70, FINISH_X);
+      if (p.x > BOSS_X - 80) startBoss();
+      if (!state.bossStarted && p.x > BOSS_X - 110) p.x = BOSS_X - 110;
+
+      updateRobots(dt);
+      updateBoss(dt);
+
+      for (const crawler of state.crawlers) {
+        if (crawler.dead) continue;
+        crawler.flash = Math.max(0, crawler.flash - dt * 7);
+        const crawlerRect = { x: crawler.x - 22, y: crawler.y - 10, w: 44, h: 24 };
+        if (rectsOverlap(playerRect(), crawlerRect)) {
+          crawler.dead = true;
+          hurtPlayer(34);
+          burst(state.particles, crawler.x, crawler.y, "#fb7185", 38);
+          state.message = "Ground mine exploded! Duck and shoot those first.";
+        }
       }
 
-      for (const enemy of state.enemies) updateEnemy(enemy, dt);
+      for (const alien of state.aliens) {
+        if (alien.hp <= 0) continue;
+        alien.flash = Math.max(0, alien.flash - dt * 7);
+        alien.vy += 900 * dt;
+        alien.y += alien.vy * dt;
+        alien.x += alien.vx * dt;
+        if (alien.y > GROUND_Y - 26) {
+          alien.y = GROUND_Y - 26;
+          alien.vy = 0;
+          alien.active = true;
+        }
+        if (alien.active) alien.x += Math.sign(state.player.x - alien.x) * 112 * dt;
+        if (rectsOverlap(playerRect(), { x: alien.x - 18, y: alien.y - 28, w: 36, h: 36 })) hurtPlayer(11);
+      }
 
       for (const bullet of state.bullets) {
         bullet.x += bullet.vx * dt;
-        bullet.y += bullet.vy * dt;
+        bullet.y += (bullet.vy ?? 0) * dt;
         bullet.life -= dt;
-        if (bulletHitsCover(bullet)) bullet.life = 0;
         if (bullet.enemy) {
-          if (bullet.life > 0 && dist(bullet, player) < PLAYER_R + bullet.size) {
+          if (rectsOverlap(playerRect(), { x: bullet.x - 5, y: bullet.y - 5, w: 10, h: 10 })) {
             bullet.life = 0;
             hurtPlayer(bullet.damage);
           }
-        } else {
-          for (const enemy of state.enemies) {
-            if (enemy.hp <= 0 || bullet.life <= 0 || dist(bullet, enemy) > enemy.r + bullet.size) continue;
-            enemy.hp -= bullet.damage;
-            enemy.hitFlash = 1;
+          continue;
+        }
+
+        for (const crawler of state.crawlers) {
+          if (crawler.dead || bullet.life <= 0) continue;
+          if (!bullet.low) continue;
+          if (rectsOverlap({ x: bullet.x - 7, y: bullet.y - 4, w: 14, h: 8 }, { x: crawler.x - 24, y: crawler.y - 12, w: 48, h: 26 })) {
+            crawler.hp -= bullet.damage;
+            crawler.flash = 1;
             bullet.life = 0;
-            pushParticles(state.particles, bullet.x, bullet.y, enemyColors[enemy.kind], 6);
-            if (enemy.hp <= 0) {
+            if (crawler.hp <= 0) {
+              crawler.dead = true;
+              state.score += 350;
               state.kills += 1;
-              state.score += enemy.kind === "boss" ? 5000 : enemy.kind === "heavy" ? 750 : 300;
-              pushParticles(state.particles, enemy.x, enemy.y, enemyColors[enemy.kind], enemy.kind === "boss" ? 48 : 18);
-              if (Math.random() < 0.35 || enemy.kind === "boss") state.pickups.push({ x: enemy.x, y: GROUND_Y - 34, kind: Math.random() < 0.55 ? "heart" : "ammo", life: 10 });
+              burst(state.particles, crawler.x, crawler.y, "#67e8f9", 22);
+            }
+          }
+        }
+        for (const robot of state.robots) {
+          if (robot.hp <= 0 || bullet.life <= 0) continue;
+          const radius = robotRadius(robot);
+          if (rectsOverlap({ x: bullet.x - 7, y: bullet.y - 4, w: 14, h: 8 }, { x: robot.x - radius, y: GROUND_Y - radius * 2, w: radius * 2, h: radius * 2 })) {
+            robot.hp -= bullet.damage;
+            robot.flash = 1;
+            bullet.life = 0;
+            if (robot.hp <= 0) {
+              state.score += robot.type === "tank" ? 900 : 450;
+              state.kills += 1;
+              burst(state.particles, robot.x, GROUND_Y - radius, "#67e8f9", robot.type === "tank" ? 36 : 22);
+            }
+          }
+        }
+        for (const alien of state.aliens) {
+          if (alien.hp <= 0 || bullet.life <= 0) continue;
+          if (rectsOverlap({ x: bullet.x - 7, y: bullet.y - 4, w: 14, h: 8 }, { x: alien.x - 18, y: alien.y - 30, w: 36, h: 38 })) {
+            alien.hp -= 1;
+            alien.flash = 1;
+            bullet.life = 0;
+            if (alien.hp <= 0) {
+              state.helicopter.aliensKilled += 1;
+              state.score += 500;
+              state.kills += 1;
+              burst(state.particles, alien.x, alien.y, "#a7f3d0", 18);
+            }
+          }
+        }
+        if (state.bossPhase === "attack") {
+          for (const cannon of state.cannons) {
+            if (cannon.dead || bullet.life <= 0) continue;
+            const cx = state.helicopter.x + cannon.ox;
+            const cy = state.helicopter.y + cannon.oy;
+            if (rectsOverlap({ x: bullet.x - 7, y: bullet.y - 4, w: 14, h: 8 }, { x: cx - 24, y: cy - 18, w: 48, h: 36 })) {
+              cannon.hp -= 1;
+              cannon.flash = 1;
+              bullet.life = 0;
+              if (cannon.hp <= 0) {
+                cannon.dead = true;
+                state.score += 1500;
+                burst(state.particles, cx, cy, "#fde047", 32);
+              }
             }
           }
         }
       }
-      state.bullets = state.bullets.filter((bullet) => bullet.life > 0 && bullet.y > 0 && bullet.y < GROUND_Y + 80 && bullet.x > state.cameraX - 120 && bullet.x < state.cameraX + window.innerWidth + 180);
-
-      for (const pickup of state.pickups) {
-        pickup.life -= dt;
-        if (dist(pickup, player) < 34) {
-          pickup.life = 0;
-          if (pickup.kind === "heart") player.hp = Math.min(player.maxHp, player.hp + 28);
-          else player.ammo = player.maxAmmo;
-        }
-      }
-      state.pickups = state.pickups.filter((pickup) => pickup.life > 0);
+      state.bullets = state.bullets.filter((bullet) => bullet.life > 0 && bullet.x > state.cameraX - 160 && bullet.x < state.cameraX + window.innerWidth + 240 && bullet.y > 0 && bullet.y < GROUND_Y + 80);
 
       for (const particle of state.particles) {
         particle.x += particle.vx * dt;
         particle.y += particle.vy * dt;
-        particle.vy += 260 * dt;
+        particle.vy += 440 * dt;
         particle.life -= dt;
       }
       state.particles = state.particles.filter((particle) => particle.life > 0);
-      state.cameraX += (player.x - 250 - state.cameraX) * 0.13;
-      state.cameraX = clamp(state.cameraX, 0, FINISH_X - window.innerWidth + 180);
+      state.cameraX += (p.x - 250 - state.cameraX) * 0.14;
+      state.cameraX = clamp(state.cameraX, 0, FINISH_X - window.innerWidth + 260);
     };
 
-    const drawBoy = (x: number, y: number, aimingRight: boolean) => {
+    const drawPlayer = () => {
+      const p = state.player;
+      const h = p.duck ? DUCK_H : PLAYER_H;
       ctx.save();
-      ctx.translate(x, y);
-      ctx.scale(aimingRight ? 1 : -1, 1);
-      if (state.player.invuln > 0) ctx.globalAlpha = 0.55 + Math.sin(performance.now() * 0.04) * 0.28;
+      ctx.translate(p.x, p.y + PLAYER_H - h);
+      ctx.scale(p.facing, 1);
+      if (p.invuln > 0) ctx.globalAlpha = 0.55 + Math.sin(performance.now() * 0.05) * 0.25;
       ctx.fillStyle = "#e2e8f0";
-      ctx.fillRect(-15, -24, 30, 36);
+      ctx.fillRect(-15, 20, 30, h - 25);
       ctx.fillStyle = "#38bdf8";
-      ctx.fillRect(-10, -18, 20, 16);
+      ctx.fillRect(-10, 27, 20, 12);
       ctx.fillStyle = "#94a3b8";
-      ctx.fillRect(-13, 10, 10, 21);
-      ctx.fillRect(3, 10, 10, 21);
-      ctx.fillStyle = "#cbd5e1";
-      ctx.beginPath();
-      ctx.arc(0, -41, 18, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "rgba(14,165,233,0.65)";
-      ctx.beginPath();
-      ctx.ellipse(4, -41, 11, 8, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = "#f8fafc";
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(0, -41, 18, 0, Math.PI * 2);
-      ctx.stroke();
+      ctx.fillRect(-13, h - 7, 10, 14);
+      ctx.fillRect(3, h - 7, 10, 14);
+      if (!p.duck) {
+        ctx.fillStyle = "#cbd5e1";
+        ctx.beginPath();
+        ctx.arc(0, 4, 17, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "rgba(14,165,233,0.65)";
+        ctx.beginPath();
+        ctx.ellipse(4, 4, 11, 8, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
       ctx.fillStyle = "#67e8f9";
-      ctx.fillRect(10, -25, 42, 12);
+      ctx.fillRect(10, p.duck ? 25 : 32, 42, 11);
       ctx.fillStyle = "#0f172a";
-      ctx.fillRect(43, -22, 20, 6);
-      ctx.fillStyle = "#fef08a";
-      ctx.fillRect(50, -24, 8, 2);
+      ctx.fillRect(43, p.duck ? 28 : 35, 20, 5);
       ctx.restore();
     };
 
-    const drawEnemy = (enemy: Enemy) => {
-      if (enemy.hp <= 0) return;
+    const drawRobot = (robot: Robot) => {
+      if (robot.hp <= 0) return;
+      const r = robot.type === "tank" ? 28 : robot.type === "gunner" ? 21 : 19;
       ctx.save();
-      ctx.translate(enemy.x, enemy.y);
-      const color = enemy.hitFlash > 0 ? "#ffffff" : enemyColors[enemy.kind];
-      ctx.fillStyle = "#0f172a";
-      ctx.fillRect(-enemy.r * 0.85, -enemy.r * 0.7, enemy.r * 1.7, enemy.r * 1.45);
-      ctx.fillStyle = color;
-      ctx.fillRect(-enemy.r * 0.68, -enemy.r * 0.52, enemy.r * 1.36, enemy.r * 1.04);
-      ctx.strokeStyle = "rgba(226,232,240,0.8)";
-      ctx.lineWidth = 2;
-      ctx.strokeRect(-enemy.r * 0.68, -enemy.r * 0.52, enemy.r * 1.36, enemy.r * 1.04);
+      ctx.translate(robot.x, GROUND_Y - r);
+      ctx.fillStyle = robot.flash > 0 ? "white" : robot.type === "tank" ? "#94a3b8" : robot.type === "gunner" ? "#a78bfa" : "#22d3ee";
+      ctx.fillRect(-r, -r, r * 2, r * 1.7);
       ctx.fillStyle = "#020617";
-      ctx.fillRect(-enemy.r * 0.55, -enemy.r * 0.3, enemy.r * 1.1, enemy.r * 0.3);
-      ctx.fillStyle = enemy.kind === "boss" ? "#fef08a" : "#67e8f9";
-      ctx.fillRect(-enemy.r * 0.38, -enemy.r * 0.22, enemy.r * 0.24, enemy.r * 0.14);
-      ctx.fillRect(enemy.r * 0.14, -enemy.r * 0.22, enemy.r * 0.24, enemy.r * 0.14);
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(-enemy.r * 0.35, -enemy.r * 0.7);
-      ctx.lineTo(-enemy.r * 0.62, -enemy.r * 1.08);
-      ctx.moveTo(enemy.r * 0.35, -enemy.r * 0.7);
-      ctx.lineTo(enemy.r * 0.62, -enemy.r * 1.08);
-      ctx.stroke();
-      ctx.fillStyle = "#e2e8f0";
-      ctx.beginPath();
-      ctx.arc(-enemy.r * 0.62, -enemy.r * 1.1, 3.5, 0, Math.PI * 2);
-      ctx.arc(enemy.r * 0.62, -enemy.r * 1.1, 3.5, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.fillRect(-r * 0.65, -r * 0.55, r * 1.3, r * 0.38);
+      ctx.fillStyle = "#67e8f9";
+      ctx.fillRect(-r * 0.42, -r * 0.44, 7, 5);
+      ctx.fillRect(r * 0.2, -r * 0.44, 7, 5);
       ctx.fillStyle = "#334155";
-      ctx.fillRect(-enemy.r * 0.9, enemy.r * 0.75, enemy.r * 0.55, enemy.r * 0.25);
-      ctx.fillRect(enemy.r * 0.35, enemy.r * 0.75, enemy.r * 0.55, enemy.r * 0.25);
-      if (enemy.kind === "shooter" || enemy.kind === "boss") {
+      ctx.fillRect(-r * 0.75, r * 0.8, r * 0.55, 8);
+      ctx.fillRect(r * 0.2, r * 0.8, r * 0.55, 8);
+      if (robot.type !== "walker") {
         ctx.fillStyle = "#111827";
-        ctx.fillRect(-enemy.r - 32, -6, 38, 10);
-        ctx.fillStyle = "#67e8f9";
-        ctx.fillRect(-enemy.r - 36, -4, 8, 6);
-      }
-      if (enemy.kind === "boss") {
-        ctx.strokeStyle = "#fef08a";
-        ctx.lineWidth = 4;
-        ctx.strokeRect(-enemy.r, -enemy.r * 0.86, enemy.r * 2, enemy.r * 1.7);
+        ctx.fillRect(-r - 26, -3, 34, 9);
+        ctx.fillStyle = "#fef08a";
+        ctx.fillRect(-r - 30, -1, 7, 5);
       }
       ctx.restore();
       ctx.fillStyle = "rgba(15,23,42,0.8)";
-      ctx.fillRect(enemy.x - enemy.r, enemy.y - enemy.r - 17, enemy.r * 2, 5);
+      ctx.fillRect(robot.x - r, GROUND_Y - r * 2 - 13, r * 2, 5);
       ctx.fillStyle = "#67e8f9";
-      ctx.fillRect(enemy.x - enemy.r, enemy.y - enemy.r - 17, enemy.r * 2 * Math.max(0, enemy.hp / enemy.maxHp), 5);
+      ctx.fillRect(robot.x - r, GROUND_Y - r * 2 - 13, r * 2 * Math.max(0, robot.hp / robot.maxHp), 5);
+    };
+
+    const drawCrawler = (crawler: Crawler) => {
+      if (crawler.dead) return;
+      ctx.fillStyle = crawler.flash > 0 ? "white" : "#ef4444";
+      ctx.fillRect(crawler.x - 24, crawler.y - 10, 48, 22);
+      ctx.fillStyle = "#111827";
+      ctx.fillRect(crawler.x - 17, crawler.y - 17, 34, 9);
+      ctx.fillStyle = "#fef08a";
+      ctx.fillRect(crawler.x - 8, crawler.y - 5, 16, 4);
+    };
+
+    const drawAlien = (alien: Alien) => {
+      if (alien.hp <= 0) return;
+      ctx.fillStyle = alien.flash > 0 ? "white" : "#a7f3d0";
+      ctx.beginPath();
+      ctx.ellipse(alien.x, alien.y - 14, 17, 23, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#052e16";
+      ctx.beginPath();
+      ctx.arc(alien.x - 6, alien.y - 18, 3, 0, Math.PI * 2);
+      ctx.arc(alien.x + 6, alien.y - 18, 3, 0, Math.PI * 2);
+      ctx.fill();
+    };
+
+    const drawBoss = () => {
+      if (!state.bossStarted || state.bossPhase === "dead") return;
+      const heli = state.helicopter;
+      ctx.save();
+      ctx.translate(heli.x, heli.y);
+      ctx.fillStyle = "#334155";
+      ctx.fillRect(-130, -28, 260, 62);
+      ctx.fillStyle = "#64748b";
+      ctx.beginPath();
+      ctx.ellipse(-35, 2, 82, 38, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(103,232,249,0.65)";
+      ctx.fillRect(-78, -12, 78, 22);
+      ctx.strokeStyle = "#e2e8f0";
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(-170, -42);
+      ctx.lineTo(170, -42);
+      ctx.moveTo(0, -58);
+      ctx.lineTo(0, -26);
+      ctx.stroke();
+      ctx.fillStyle = "#475569";
+      ctx.fillRect(100, -8, 70, 16);
+      for (const cannon of state.cannons) {
+        if (cannon.dead) continue;
+        ctx.fillStyle = cannon.flash > 0 ? "white" : "#111827";
+        ctx.fillRect(cannon.ox - 23, cannon.oy - 14, 46, 28);
+        ctx.fillStyle = "#ef4444";
+        ctx.fillRect(cannon.ox - 7, cannon.oy + 12, 14, 24);
+        ctx.fillStyle = "rgba(15,23,42,0.8)";
+        ctx.fillRect(cannon.ox - 24, cannon.oy - 25, 48, 5);
+        ctx.fillStyle = "#fde047";
+        ctx.fillRect(cannon.ox - 24, cannon.oy - 25, 48 * Math.max(0, cannon.hp / cannon.maxHp), 5);
+      }
+      ctx.restore();
     };
 
     const draw = () => {
       const w = window.innerWidth;
       const h = window.innerHeight;
       const sky = ctx.createLinearGradient(0, 0, 0, h);
-      sky.addColorStop(0, "#190b3d");
-      sky.addColorStop(0.45, "#312e81");
-      sky.addColorStop(1, "#4c1d95");
+      sky.addColorStop(0, "#0f172a");
+      sky.addColorStop(0.5, "#312e81");
+      sky.addColorStop(1, "#581c87");
       ctx.fillStyle = sky;
       ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = "rgba(255,255,255,0.75)";
-      for (let i = 0; i < 70; i += 1) {
-        ctx.fillRect((i * 137 - state.cameraX * 0.08) % (w + 80), (i * 71) % 250 + 18, 1.5 + (i % 3), 1.5 + (i % 3));
-      }
-      ctx.fillStyle = "rgba(125,211,252,0.22)";
-      ctx.beginPath();
-      ctx.arc(w - 145 - state.cameraX * 0.03, 90, 54, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "rgba(251,191,36,0.18)";
-      ctx.beginPath();
-      ctx.arc(135 - state.cameraX * 0.018, 132, 88, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.72)";
+      for (let i = 0; i < 85; i += 1) ctx.fillRect((i * 137 - state.cameraX * 0.08) % (w + 80), (i * 71) % 260 + 16, 1 + (i % 3), 1 + (i % 3));
+
       ctx.save();
       ctx.translate(-state.cameraX, 0);
-
-      for (let x = -200; x < FINISH_X + 600; x += 360) {
-        ctx.fillStyle = x % 720 === 0 ? "#4c1d95" : "#5b21b6";
+      for (let x = -200; x < FINISH_X + 700; x += 340) {
+        ctx.fillStyle = x % 680 === 0 ? "#4c1d95" : "#5b21b6";
         ctx.beginPath();
         ctx.moveTo(x, GROUND_Y);
-        ctx.lineTo(x + 70, 230);
-        ctx.lineTo(x + 145, GROUND_Y);
+        ctx.lineTo(x + 80, 230);
+        ctx.lineTo(x + 165, GROUND_Y);
         ctx.closePath();
         ctx.fill();
         ctx.fillStyle = "rgba(103,232,249,0.55)";
-        ctx.fillRect(x + 86, 285, 14, 115);
-        ctx.fillStyle = "#67e8f9";
-        ctx.beginPath();
-        ctx.moveTo(x + 205, GROUND_Y);
-        ctx.lineTo(x + 245, GROUND_Y - 140);
-        ctx.lineTo(x + 285, GROUND_Y);
-        ctx.closePath();
-        ctx.fill();
+        ctx.fillRect(x + 204, GROUND_Y - 132, 20, 132);
       }
-      ctx.fillStyle = "#581c87";
-      ctx.beginPath();
-      ctx.moveTo(-200, GROUND_Y);
-      for (let x = -200; x < FINISH_X + 800; x += 120) ctx.lineTo(x, GROUND_Y + Math.sin(x * 0.012) * 18);
-      ctx.lineTo(FINISH_X + 800, GROUND_Y + 170);
-      ctx.lineTo(-200, GROUND_Y + 170);
-      ctx.closePath();
-      ctx.fill();
+      ctx.fillStyle = "#3b0764";
+      ctx.fillRect(-200, GROUND_Y, FINISH_X + 900, 170);
       ctx.fillStyle = "rgba(103,232,249,0.35)";
       for (let x = 0; x < FINISH_X + 500; x += 150) ctx.fillRect(x, GROUND_Y + 58, 70, 8);
       ctx.fillStyle = "rgba(15,23,42,0.45)";
@@ -486,52 +565,23 @@ export default function RogueBlaster() {
         ctx.ellipse(x, GROUND_Y + 25, 62, 12, 0, 0, Math.PI * 2);
         ctx.fill();
       }
+      ctx.fillStyle = "rgba(239,68,68,0.45)";
+      ctx.fillRect(BOSS_X - 30, 120, 22, GROUND_Y - 120);
+      ctx.fillStyle = "#e2e8f0";
+      ctx.font = "900 20px Inter, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("HELICOPTER BOSS", BOSS_X + 160, 105);
 
-      for (let i = 1; i <= STAGES; i += 1) {
-        const x = i * STAGE_W;
-        const locked = stageAlive() && i === state.stage + 1;
-        const beam = ctx.createLinearGradient(x - 14, 120, x + 14, GROUND_Y);
-        beam.addColorStop(0, locked ? "rgba(239,68,68,0.25)" : "rgba(34,211,238,0.14)");
-        beam.addColorStop(0.5, locked ? "rgba(248,113,113,0.75)" : "rgba(34,211,238,0.5)");
-        beam.addColorStop(1, locked ? "rgba(239,68,68,0.25)" : "rgba(34,211,238,0.14)");
-        ctx.fillStyle = beam;
-        ctx.fillRect(x - 14, 120, 28, GROUND_Y - 120);
-        ctx.fillStyle = "#e2e8f0";
-        ctx.font = "900 20px Inter, sans-serif";
-        ctx.textAlign = "center";
-        ctx.fillText(i === STAGES ? "ROBOT CORE" : `SECTOR ${i + 1}`, x, 105);
-      }
-
-      for (const cover of covers) {
-        const crate = ctx.createLinearGradient(cover.x, cover.y, cover.x + cover.w, cover.y + cover.h);
-        crate.addColorStop(0, "#0f172a");
-        crate.addColorStop(0.5, "#334155");
-        crate.addColorStop(1, "#111827");
-        ctx.fillStyle = crate;
-        ctx.fillRect(cover.x, cover.y, cover.w, cover.h);
-        ctx.strokeStyle = "rgba(103,232,249,0.8)";
-        ctx.lineWidth = 2;
-        ctx.strokeRect(cover.x + 4, cover.y + 4, cover.w - 8, cover.h - 8);
-        ctx.fillStyle = "rgba(103,232,249,0.25)";
-        ctx.fillRect(cover.x + 12, cover.y + 12, cover.w - 24, 8);
-      }
-      for (const pickup of state.pickups) {
-        ctx.fillStyle = pickup.kind === "heart" ? "#fb7185" : "#38bdf8";
-        ctx.beginPath();
-        ctx.arc(pickup.x, pickup.y, 15, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = "#020617";
-        ctx.font = "900 15px Inter, sans-serif";
-        ctx.textAlign = "center";
-        ctx.fillText(pickup.kind === "heart" ? "+" : "A", pickup.x, pickup.y + 5);
-      }
+      for (const crawler of state.crawlers) drawCrawler(crawler);
+      for (const robot of state.robots) drawRobot(robot);
+      for (const alien of state.aliens) drawAlien(alien);
+      drawBoss();
       for (const bullet of state.bullets) {
-        ctx.fillStyle = bullet.enemy ? "#fb7185" : "#fde047";
+        ctx.fillStyle = bullet.enemy ? "#fb7185" : bullet.low ? "#22d3ee" : "#fde047";
         ctx.beginPath();
-        ctx.arc(bullet.x, bullet.y, bullet.size, 0, Math.PI * 2);
+        ctx.arc(bullet.x, bullet.y, bullet.enemy ? 5 : 4, 0, Math.PI * 2);
         ctx.fill();
       }
-      for (const enemy of state.enemies) drawEnemy(enemy);
       for (const particle of state.particles) {
         ctx.globalAlpha = Math.max(0, particle.life);
         ctx.fillStyle = particle.color;
@@ -540,7 +590,7 @@ export default function RogueBlaster() {
         ctx.fill();
         ctx.globalAlpha = 1;
       }
-      drawBoy(state.player.x, state.player.y, mouse.x > state.player.x - state.cameraX);
+      drawPlayer();
       ctx.restore();
 
       if (!state.started || state.gameOver || state.won) {
@@ -548,18 +598,18 @@ export default function RogueBlaster() {
         ctx.fillRect(0, 0, w, h);
         ctx.textAlign = "center";
         ctx.fillStyle = "white";
-        ctx.font = "900 54px Inter, sans-serif";
-        ctx.fillText(state.won ? "Planet Cleared!" : state.gameOver ? "Suit Down" : "Rough Run: Planet Robots", w / 2, h / 2 - 72);
+        ctx.font = "900 50px Inter, sans-serif";
+        ctx.fillText(state.won ? "Helicopter Down!" : state.gameOver ? "Mission Failed" : "Rough Run: Robot Silius", w / 2, h / 2 - 72);
         ctx.fillStyle = "#fde68a";
-        ctx.font = "900 20px Inter, sans-serif";
-        ctx.fillText(state.won || state.gameOver ? `Score ${state.score.toLocaleString()} • Robots ${state.kills}` : "Alien planet run-through shooter — robot ambushes, force gates, plasma crates", w / 2, h / 2 - 24);
+        ctx.font = "900 19px Inter, sans-serif";
+        ctx.fillText(state.won || state.gameOver ? `Score ${state.score.toLocaleString()} • Robots ${state.kills}` : "One long run-and-gun stage: jump, duck, shoot, and fight a helicopter boss", w / 2, h / 2 - 24);
         ctx.fillStyle = "#cbd5e1";
         ctx.font = "800 16px Inter, sans-serif";
-        ctx.fillText("A/D move • W/↑ jump • Mouse aim • Click/Space shoot • R reload/restart", w / 2, h / 2 + 24);
+        ctx.fillText("A/D move • W/↑ jump • S/↓ duck • Space/F shoot • R reload", w / 2, h / 2 + 24);
       }
 
       if (hudRef.current) {
-        hudRef.current.innerHTML = `<div><span>Sector</span><strong>${state.stage + 1}/${STAGES}</strong></div><div><span>Suit</span><strong>${Math.round(state.player.hp)}/${state.player.maxHp}</strong></div><div><span>Cells</span><strong>${state.player.reload > 0 ? "Reload" : `${state.player.ammo}/${state.player.maxAmmo}`}</strong></div><div><span>Robots</span><strong>${state.kills}</strong></div><div><span>Score</span><strong>${state.score.toLocaleString()}</strong></div><div><span>Gate</span><strong>${stageAlive() ? "Locked" : "Open"}</strong></div>`;
+        hudRef.current.innerHTML = `<div><span>Suit</span><strong>${Math.round(state.player.hp)}/${state.player.maxHp}</strong></div><div><span>Cells</span><strong>${state.player.reload > 0 ? "Reload" : `${state.player.ammo}/${state.player.maxAmmo}`}</strong></div><div><span>Robots</span><strong>${state.kills}</strong></div><div><span>Score</span><strong>${state.score.toLocaleString()}</strong></div><div><span>Boss</span><strong>${state.bossStarted ? state.bossPhase : "Ahead"}</strong></div><div><span>Tip</span><strong>${state.message}</strong></div>`;
       }
     };
 
@@ -578,26 +628,24 @@ export default function RogueBlaster() {
       window.removeEventListener("resize", resize);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
-      window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("pointerup", onPointerUp);
     };
   }, []);
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-slate-950 text-white">
-      <canvas ref={canvasRef} className="absolute inset-0 cursor-crosshair" />
+      <canvas ref={canvasRef} className="absolute inset-0" />
       <div className="pointer-events-none absolute left-4 right-4 top-4 z-10 flex flex-wrap items-start justify-between gap-3">
         <div className="rounded-3xl border border-white/10 bg-black/50 px-5 py-4 shadow-2xl backdrop-blur-md">
           <p className="text-xs font-black uppercase tracking-[0.28em] text-cyan-200">Rough Run</p>
-          <h1 className="text-2xl font-black">Planet Robot Siege</h1>
-          <p className="mt-1 text-sm font-bold text-slate-300">Alien side-scrolling run-and-gun. W or ↑ jumps; clear robot force gates.</p>
+          <h1 className="text-2xl font-black">Robot Silius Mission</h1>
+          <p className="mt-1 text-sm font-bold text-slate-300">Run, jump-shoot, duck-shoot ground mines, then destroy helicopter cannons.</p>
         </div>
         <Link className="pointer-events-auto rounded-full bg-white px-5 py-3 text-xs font-black uppercase tracking-[0.2em] text-slate-950 shadow-xl transition hover:-translate-y-1 hover:bg-cyan-100" to="/">
           Back to Lobby
         </Link>
       </div>
-      <div ref={hudRef} className="pointer-events-none absolute bottom-4 left-1/2 z-10 grid w-[min(980px,calc(100vw-2rem))] -translate-x-1/2 grid-cols-3 gap-2 rounded-3xl border border-white/10 bg-black/55 p-3 text-center shadow-2xl backdrop-blur-md sm:grid-cols-6 [&_div]:rounded-2xl [&_div]:bg-white/10 [&_div]:px-3 [&_div]:py-2 [&_span]:block [&_span]:text-[10px] [&_span]:font-black [&_span]:uppercase [&_span]:tracking-[0.18em] [&_span]:text-slate-400 [&_strong]:text-lg [&_strong]:font-black" />
+      <div ref={hudRef} className="pointer-events-none absolute bottom-4 left-1/2 z-10 grid w-[min(1120px,calc(100vw-2rem))] -translate-x-1/2 grid-cols-3 gap-2 rounded-3xl border border-white/10 bg-black/55 p-3 text-center shadow-2xl backdrop-blur-md sm:grid-cols-6 [&_div]:rounded-2xl [&_div]:bg-white/10 [&_div]:px-3 [&_div]:py-2 [&_span]:block [&_span]:text-[10px] [&_span]:font-black [&_span]:uppercase [&_span]:tracking-[0.18em] [&_span]:text-slate-400 [&_strong]:text-sm [&_strong]:font-black" />
     </main>
   );
 }
