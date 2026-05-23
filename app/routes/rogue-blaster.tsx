@@ -52,7 +52,11 @@ function makeRobots(): Robot[] {
 }
 
 function robotRadius(robot: Robot) {
-  return robot.type === "tank" ? 28 : robot.type === "gunner" ? 21 : 19;
+  return robot.type === "tank" ? 31 : robot.type === "gunner" ? 24 : 22;
+}
+
+function robotHeight(robot: Robot) {
+  return robot.type === "tank" ? 104 : robot.type === "gunner" ? 88 : 82;
 }
 
 function makeCrawlers(): Crawler[] {
@@ -164,7 +168,7 @@ export default function RogueBlaster() {
         return;
       }
       const low = state.player.duck;
-      const y = state.player.y + (low ? 30 : 28);
+      const y = low ? GROUND_Y - 13 : state.player.y + 28;
       state.bullets.push({ x: state.player.x + state.player.facing * 24, y, vx: state.player.facing * 760, life: 0.9, damage: 1, enemy: false, low });
       state.player.cooldown = 0.12;
       state.player.ammo -= 1;
@@ -213,7 +217,8 @@ export default function RogueBlaster() {
           robot.shootTimer = robot.type === "tank" ? 1.05 : 1.45;
         }
         const radius = robotRadius(robot);
-        if (rectsOverlap(playerRect(), { x: robot.x - radius, y: GROUND_Y - radius * 2, w: radius * 2, h: radius * 2 })) hurtPlayer(robot.type === "tank" ? 16 : 9);
+        const height = robotHeight(robot);
+        if (rectsOverlap(playerRect(), { x: robot.x - radius, y: GROUND_Y - height, w: radius * 2, h: height })) hurtPlayer(robot.type === "tank" ? 16 : 9);
       }
     };
 
@@ -355,14 +360,15 @@ export default function RogueBlaster() {
         for (const robot of state.robots) {
           if (robot.hp <= 0 || bullet.life <= 0) continue;
           const radius = robotRadius(robot);
-          if (rectsOverlap({ x: bullet.x - 7, y: bullet.y - 4, w: 14, h: 8 }, { x: robot.x - radius, y: GROUND_Y - radius * 2, w: radius * 2, h: radius * 2 })) {
+          const height = robotHeight(robot);
+          if (rectsOverlap({ x: bullet.x - 7, y: bullet.y - 4, w: 14, h: 8 }, { x: robot.x - radius, y: GROUND_Y - height, w: radius * 2, h: height })) {
             robot.hp -= bullet.damage;
             robot.flash = 1;
             bullet.life = 0;
             if (robot.hp <= 0) {
               state.score += robot.type === "tank" ? 900 : 450;
               state.kills += 1;
-              burst(state.particles, robot.x, GROUND_Y - radius, "#67e8f9", robot.type === "tank" ? 36 : 22);
+              burst(state.particles, robot.x, GROUND_Y - height / 2, "#67e8f9", robot.type === "tank" ? 36 : 22);
             }
           }
         }
@@ -436,38 +442,56 @@ export default function RogueBlaster() {
         ctx.fill();
       }
       ctx.fillStyle = "#67e8f9";
-      ctx.fillRect(10, p.duck ? 25 : 32, 42, 11);
+      ctx.fillRect(10, p.duck ? h - 16 : 32, 42, 11);
       ctx.fillStyle = "#0f172a";
-      ctx.fillRect(43, p.duck ? 28 : 35, 20, 5);
+      ctx.fillRect(43, p.duck ? h - 13 : 35, 20, 5);
       ctx.restore();
     };
 
     const drawRobot = (robot: Robot) => {
       if (robot.hp <= 0) return;
-      const r = robot.type === "tank" ? 28 : robot.type === "gunner" ? 21 : 19;
+      const r = robotRadius(robot);
+      const height = robotHeight(robot);
+      const bodyTop = -height;
       ctx.save();
-      ctx.translate(robot.x, GROUND_Y - r);
+      ctx.translate(robot.x, GROUND_Y);
       ctx.fillStyle = robot.flash > 0 ? "white" : robot.type === "tank" ? "#94a3b8" : robot.type === "gunner" ? "#a78bfa" : "#22d3ee";
-      ctx.fillRect(-r, -r, r * 2, r * 1.7);
+      ctx.fillRect(-r, bodyTop + 18, r * 2, height - 28);
+      ctx.fillStyle = "#0f172a";
+      ctx.fillRect(-r * 0.9, bodyTop + 4, r * 1.8, 26);
+      ctx.strokeStyle = "rgba(226,232,240,0.85)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(-r, bodyTop + 18, r * 2, height - 28);
       ctx.fillStyle = "#020617";
-      ctx.fillRect(-r * 0.65, -r * 0.55, r * 1.3, r * 0.38);
+      ctx.fillRect(-r * 0.7, bodyTop + 12, r * 1.4, 12);
       ctx.fillStyle = "#67e8f9";
-      ctx.fillRect(-r * 0.42, -r * 0.44, 7, 5);
-      ctx.fillRect(r * 0.2, -r * 0.44, 7, 5);
+      ctx.fillRect(-r * 0.48, bodyTop + 15, 8, 5);
+      ctx.fillRect(r * 0.2, bodyTop + 15, 8, 5);
+      ctx.strokeStyle = robot.type === "tank" ? "#fef08a" : "#67e8f9";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.4, bodyTop + 4);
+      ctx.lineTo(-r * 0.7, bodyTop - 16);
+      ctx.moveTo(r * 0.4, bodyTop + 4);
+      ctx.lineTo(r * 0.7, bodyTop - 16);
+      ctx.stroke();
       ctx.fillStyle = "#334155";
-      ctx.fillRect(-r * 0.75, r * 0.8, r * 0.55, 8);
-      ctx.fillRect(r * 0.2, r * 0.8, r * 0.55, 8);
+      ctx.fillRect(-r * 0.95, -10, r * 0.65, 12);
+      ctx.fillRect(r * 0.3, -10, r * 0.65, 12);
+      ctx.fillStyle = "#475569";
+      ctx.fillRect(-r * 0.72, bodyTop + 40, 9, height - 50);
+      ctx.fillRect(r * 0.42, bodyTop + 40, 9, height - 50);
       if (robot.type !== "walker") {
         ctx.fillStyle = "#111827";
-        ctx.fillRect(-r - 26, -3, 34, 9);
+        ctx.fillRect(-r - 30, bodyTop + 48, 38, 10);
         ctx.fillStyle = "#fef08a";
-        ctx.fillRect(-r - 30, -1, 7, 5);
+        ctx.fillRect(-r - 34, bodyTop + 51, 8, 5);
       }
       ctx.restore();
       ctx.fillStyle = "rgba(15,23,42,0.8)";
-      ctx.fillRect(robot.x - r, GROUND_Y - r * 2 - 13, r * 2, 5);
+      ctx.fillRect(robot.x - r, GROUND_Y - height - 18, r * 2, 5);
       ctx.fillStyle = "#67e8f9";
-      ctx.fillRect(robot.x - r, GROUND_Y - r * 2 - 13, r * 2 * Math.max(0, robot.hp / robot.maxHp), 5);
+      ctx.fillRect(robot.x - r, GROUND_Y - height - 18, r * 2 * Math.max(0, robot.hp / robot.maxHp), 5);
     };
 
     const drawCrawler = (crawler: Crawler) => {
