@@ -232,8 +232,10 @@ export default function RogueBlaster() {
     const updateBoss = (dt: number) => {
       if (!state.bossStarted || state.bossPhase === "dead") return;
       const heli = state.helicopter;
+      const frontX = clamp(state.player.x + 330, BOSS_X + 180, FINISH_X - 260);
       heli.y += (heli.targetY - heli.y) * 0.04;
       if (state.bossPhase === "drop") {
+        heli.x += (frontX - heli.x) * 0.025;
         heli.dropTimer -= dt;
         if (heli.aliensDropped < 10 && heli.dropTimer <= 0) {
           state.aliens.push({ x: heli.x + (Math.random() - 0.5) * 140, y: heli.y + 70, vx: (Math.random() - 0.5) * 70, vy: 0, hp: 2, flash: 0, active: false });
@@ -242,10 +244,11 @@ export default function RogueBlaster() {
         }
         if (heli.aliensDropped >= 10 && state.aliens.every((alien) => alien.hp <= 0)) {
           state.bossPhase = "attack";
-          heli.targetY = 245;
-          state.message = "Helicopter is descending. Jump and shoot the cannons!";
+          heli.targetY = 315;
+          state.message = "Helicopter is dropping in front of you. Jump and shoot the cannons!";
         }
       } else if (state.bossPhase === "attack") {
+        heli.x += (frontX - heli.x) * 0.055;
         for (const cannon of state.cannons) {
           if (cannon.dead) continue;
           cannon.flash = Math.max(0, cannon.flash - dt * 8);
