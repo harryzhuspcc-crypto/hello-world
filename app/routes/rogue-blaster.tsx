@@ -96,7 +96,7 @@ export default function RogueBlaster() {
       kills: 0,
       bossStarted: false,
       bossPhase: "drop" as "drop" | "attack" | "dead",
-      helicopter: { x: BOSS_X + 430, y: 135, targetY: 135, dropTimer: 1.0, aliensDropped: 0, aliensKilled: 0 },
+      helicopter: { x: BOSS_X + 280, y: 135, targetY: 135, dropTimer: 1.0, aliensDropped: 0, aliensKilled: 0 },
       cannons: [
         { ox: -88, oy: 42, hp: 7, maxHp: 7, dead: false, flash: 0, cooldown: 0.8 },
         { ox: 0, oy: 58, hp: 9, maxHp: 9, dead: false, flash: 0, cooldown: 1.2 },
@@ -132,7 +132,7 @@ export default function RogueBlaster() {
       state.kills = 0;
       state.bossStarted = false;
       state.bossPhase = "drop";
-      state.helicopter = { x: BOSS_X + 430, y: 135, targetY: 135, dropTimer: 1.0, aliensDropped: 0, aliensKilled: 0 };
+      state.helicopter = { x: BOSS_X + 280, y: 135, targetY: 135, dropTimer: 1.0, aliensDropped: 0, aliensKilled: 0 };
       state.cannons = [
         { ox: -88, oy: 42, hp: 7, maxHp: 7, dead: false, flash: 0, cooldown: 0.8 },
         { ox: 0, oy: 58, hp: 9, maxHp: 9, dead: false, flash: 0, cooldown: 1.2 },
@@ -297,8 +297,7 @@ export default function RogueBlaster() {
         p.vy = 0;
       }
       p.x = clamp(p.x, 70, FINISH_X);
-      if (p.x > BOSS_X - 80) startBoss();
-      if (!state.bossStarted && p.x > BOSS_X - 110) p.x = BOSS_X - 110;
+      if (!state.bossStarted && p.x > BOSS_X - 170) startBoss();
 
       updateRobots(dt);
       updateBoss(dt);
@@ -589,12 +588,22 @@ export default function RogueBlaster() {
         ctx.ellipse(x, GROUND_Y + 25, 62, 12, 0, 0, Math.PI * 2);
         ctx.fill();
       }
-      ctx.fillStyle = "rgba(239,68,68,0.45)";
-      ctx.fillRect(BOSS_X - 30, 120, 22, GROUND_Y - 120);
-      ctx.fillStyle = "#e2e8f0";
-      ctx.font = "900 20px Inter, sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText("HELICOPTER BOSS", BOSS_X + 160, 105);
+      if (!state.bossStarted) {
+        ctx.fillStyle = "rgba(239,68,68,0.45)";
+        ctx.fillRect(BOSS_X - 30, 120, 22, GROUND_Y - 120);
+        ctx.fillStyle = "#fecaca";
+        ctx.font = "900 18px Inter, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("BOSS WARNING", BOSS_X + 95, 105);
+      } else {
+        ctx.fillStyle = "rgba(34,211,238,0.22)";
+        ctx.fillRect(BOSS_X - 30, 120, 22, GROUND_Y - 120);
+        ctx.fillRect(FINISH_X - 40, 120, 22, GROUND_Y - 120);
+        ctx.fillStyle = "#e2e8f0";
+        ctx.font = "900 20px Inter, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("HELICOPTER BOSS ACTIVE", BOSS_X + 240, 105);
+      }
 
       for (const crawler of state.crawlers) drawCrawler(crawler);
       for (const robot of state.robots) drawRobot(robot);
