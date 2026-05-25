@@ -92,7 +92,7 @@ function makeCrawlers(): Crawler[] {
 }
 
 function makeStage2Drones(): Drone[] {
-  return [620, 980, 1510, 1960, 3100, 3600].map((x, i) => ({ x, y: 250 + (i % 2) * 34, hp: 4, maxHp: 4, active: false, flash: 0, shootTimer: 0.9 + i * 0.12 }));
+  return [620, 980, 1510, 1960, 3100, 3600].map((x, i) => ({ x, y: 325 + (i % 2) * 35, hp: 4, maxHp: 4, active: false, flash: 0, shootTimer: 0.9 + i * 0.12 }));
 }
 
 function makeStage2Launchers(): Launcher[] {
