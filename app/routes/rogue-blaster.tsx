@@ -13,7 +13,8 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
-type Bullet = { x: number; y: number; vx: number; vy?: number; life: number; damage: number; enemy: boolean; low: boolean };
+type BossLane = "high" | "mid" | "low";
+type Bullet = { x: number; y: number; vx: number; vy?: number; life: number; damage: number; enemy: boolean; low: boolean; lane?: BossLane };
 type Robot = { x: number; y: number; hp: number; maxHp: number; speed: number; active: boolean; flash: number; shootTimer: number; type: "walker" | "gunner" | "tank" };
 type Crawler = { x: number; y: number; hp: number; dead: boolean; flash: number };
 type Alien = { x: number; y: number; vx: number; vy: number; hp: number; flash: number; active: boolean; jumpTimer: number; targetDir: -1 | 1 };
@@ -32,6 +33,7 @@ const BOSS_RIGHT_X = FINISH_X - 95;
 const ALIEN_JUMP_VX = 255;
 const ALIEN_JUMP_VY = -470;
 const ALIEN_JUMP_DELAY = 0.62;
+const BOSS_LANES: BossLane[] = ["high", "mid", "low"];
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -39,6 +41,18 @@ function clamp(value: number, min: number, max: number) {
 
 function rectsOverlap(a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }) {
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+function bossLaneY(lane: BossLane) {
+  if (lane === "high") return GROUND_Y - 70;
+  if (lane === "mid") return GROUND_Y - 56;
+  return GROUND_Y - 16;
+}
+
+function bossLaneMessage(lane: BossLane) {
+  if (lane === "high") return "HIGH SHOT — DUCK!";
+  if (lane === "mid") return "MID SHOT — DUCK OR JUMP!";
+  return "LOW SHOT — JUMP!";
 }
 
 function makeRobots(): Robot[] {
@@ -101,6 +115,7 @@ export default function RogueBlaster() {
       kills: 0,
       bossStarted: false,
       bossPhase: "drop" as "drop" | "attack" | "dead",
+      bossShotTimer: 1.0,
       helicopter: { x: BOSS_X + 280, y: 135, targetY: 135, dropTimer: 1.0, aliensDropped: 0, aliensKilled: 0 },
       cannons: [
         { ox: -88, oy: 42, hp: 7, maxHp: 7, dead: false, flash: 0, cooldown: 0.8 },
@@ -137,6 +152,7 @@ export default function RogueBlaster() {
       state.kills = 0;
       state.bossStarted = false;
       state.bossPhase = "drop";
+      state.bossShotTimer = 1.0;
       state.helicopter = { x: BOSS_X + 280, y: 135, targetY: 135, dropTimer: 1.0, aliensDropped: 0, aliensKilled: 0 };
       state.cannons = [
         { ox: -88, oy: 42, hp: 7, maxHp: 7, dead: false, flash: 0, cooldown: 0.8 },
@@ -146,7 +162,10 @@ export default function RogueBlaster() {
       state.message = "Go forward. Duck to shoot ground mines. Jump-shoot boss cannons.";
     };
 
-    const playerRect = () => ({ x: state.player.x - PLAYER_W / 2, y: state.player.y, w: PLAYER_W, h: state.player.duck ? DUCK_H : PLAYER_H });
+    const playerRect = () => {
+      const height = state.player.duck ? DUCK_H : PLAYER_H;
+      return { x: state.player.x - PLAYER_W / 2, y: state.player.y + PLAYER_H - height, w: PLAYER_W, h: height };
+    };
     const hurtPlayer = (amount: number) => {
       if (state.player.invuln > 0 || state.gameOver || state.won) return;
       state.player.hp -= amount;
@@ -237,7 +256,7 @@ export default function RogueBlaster() {
     const updateBoss = (dt: number) => {
       if (!state.bossStarted || state.bossPhase === "dead") return;
       const heli = state.helicopter;
-      const frontX = clamp(state.player.x + 330, BOSS_X + 180, FINISH_X - 260);
+      const frontX = clamp(state.player.x + 270, BOSS_X + 180, FINISH_X - 240);
       heli.y += (heli.targetY - heli.y) * 0.04;
       if (state.bossPhase === "drop") {
         heli.x += (frontX - heli.x) * 0.025;
@@ -255,20 +274,19 @@ export default function RogueBlaster() {
           state.message = "Helicopter is dropping in front of you. Jump and shoot the cannons!";
         }
       } else if (state.bossPhase === "attack") {
-        heli.x += (frontX - heli.x) * 0.055;
+        heli.x += (frontX - heli.x) * 0.08;
         for (const cannon of state.cannons) {
-          if (cannon.dead) continue;
           cannon.flash = Math.max(0, cannon.flash - dt * 8);
-          cannon.cooldown -= dt;
-          if (cannon.cooldown <= 0) {
-            const cx = heli.x + cannon.ox;
-            const cy = heli.y + cannon.oy;
-            const dx = state.player.x - cx;
-            const dy = state.player.y + 22 - cy;
-            const len = Math.hypot(dx, dy) || 1;
-            state.bullets.push({ x: cx, y: cy, vx: (dx / len) * 520, vy: (dy / len) * 520, life: 1.35, damage: 12, enemy: true, low: false });
-            cannon.cooldown = 0.7 + Math.random() * 0.45;
-          }
+        }
+        state.bossShotTimer -= dt;
+        const liveCannons = state.cannons.filter((cannon) => !cannon.dead);
+        if (liveCannons.length > 0 && state.bossShotTimer <= 0) {
+          const cannon = liveCannons[Math.floor(Math.random() * liveCannons.length)];
+          const lane = BOSS_LANES[Math.floor(Math.random() * BOSS_LANES.length)];
+          cannon.flash = 1;
+          state.bullets.push({ x: heli.x - 140, y: bossLaneY(lane), vx: -520, life: 1.55, damage: 13, enemy: true, low: false, lane });
+          state.message = bossLaneMessage(lane);
+          state.bossShotTimer = 0.95;
         }
         if (state.cannons.every((cannon) => cannon.dead)) {
           state.bossPhase = "dead";
@@ -359,7 +377,8 @@ export default function RogueBlaster() {
         bullet.y += (bullet.vy ?? 0) * dt;
         bullet.life -= dt;
         if (bullet.enemy) {
-          if (rectsOverlap(playerRect(), { x: bullet.x - 5, y: bullet.y - 5, w: 10, h: 10 })) {
+          const enemyBulletRect = bullet.lane ? { x: bullet.x - 20, y: bullet.y - 5, w: 40, h: 10 } : { x: bullet.x - 5, y: bullet.y - 5, w: 10, h: 10 };
+          if (rectsOverlap(playerRect(), enemyBulletRect)) {
             bullet.life = 0;
             hurtPlayer(bullet.damage);
           }
@@ -635,10 +654,17 @@ export default function RogueBlaster() {
       for (const alien of state.aliens) drawAlien(alien);
       drawBoss();
       for (const bullet of state.bullets) {
-        ctx.fillStyle = bullet.enemy ? "#fb7185" : bullet.low ? "#22d3ee" : "#fde047";
-        ctx.beginPath();
-        ctx.arc(bullet.x, bullet.y, bullet.enemy ? 5 : 4, 0, Math.PI * 2);
-        ctx.fill();
+        if (bullet.enemy && bullet.lane) {
+          ctx.fillStyle = bullet.lane === "high" ? "#f472b6" : bullet.lane === "mid" ? "#fb923c" : "#ef4444";
+          ctx.fillRect(bullet.x - 20, bullet.y - 5, 40, 10);
+          ctx.fillStyle = "rgba(255,255,255,0.85)";
+          ctx.fillRect(bullet.x - 15, bullet.y - 1, 30, 2);
+        } else {
+          ctx.fillStyle = bullet.enemy ? "#fb7185" : bullet.low ? "#22d3ee" : "#fde047";
+          ctx.beginPath();
+          ctx.arc(bullet.x, bullet.y, bullet.enemy ? 5 : 4, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
       for (const particle of state.particles) {
         ctx.globalAlpha = Math.max(0, particle.life);
