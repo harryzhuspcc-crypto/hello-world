@@ -16,7 +16,7 @@ export function meta({}: Route.MetaArgs) {
 type Bullet = { x: number; y: number; vx: number; vy?: number; life: number; damage: number; enemy: boolean; low: boolean };
 type Robot = { x: number; y: number; hp: number; maxHp: number; speed: number; active: boolean; flash: number; shootTimer: number; type: "walker" | "gunner" | "tank" };
 type Crawler = { x: number; y: number; hp: number; dead: boolean; flash: number };
-type Alien = { x: number; y: number; vx: number; vy: number; hp: number; flash: number; active: boolean };
+type Alien = { x: number; y: number; vx: number; vy: number; hp: number; flash: number; active: boolean; jumpTimer: number };
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; color: string; size: number };
 type Cannon = { ox: number; oy: number; hp: number; maxHp: number; dead: boolean; flash: number; cooldown: number };
 
@@ -237,10 +237,12 @@ export default function RogueBlaster() {
       if (state.bossPhase === "drop") {
         heli.x += (frontX - heli.x) * 0.025;
         heli.dropTimer -= dt;
-        if (heli.aliensDropped < 10 && heli.dropTimer <= 0) {
-          state.aliens.push({ x: heli.x + (Math.random() - 0.5) * 140, y: heli.y + 70, vx: (Math.random() - 0.5) * 70, vy: 0, hp: 2, flash: 0, active: false });
+        const livingAlien = state.aliens.some((alien) => alien.hp > 0);
+        if (heli.aliensDropped < 10 && !livingAlien && heli.dropTimer <= 0) {
+          state.aliens.push({ x: heli.x + (Math.random() - 0.5) * 80, y: heli.y + 70, vx: (Math.random() - 0.5) * 80, vy: 0, hp: 2, flash: 0, active: false, jumpTimer: 0.2 });
           heli.aliensDropped += 1;
-          heli.dropTimer = 0.75;
+          heli.dropTimer = 0.7;
+          state.message = `Alien ${heli.aliensDropped}/10 dropped — it will jump at you!`;
         }
         if (heli.aliensDropped >= 10 && state.aliens.every((alien) => alien.hp <= 0)) {
           state.bossPhase = "attack";
@@ -328,7 +330,22 @@ export default function RogueBlaster() {
           alien.vy = 0;
           alien.active = true;
         }
-        if (alien.active) alien.x += Math.sign(state.player.x - alien.x) * 112 * dt;
+        if (alien.active) {
+          alien.jumpTimer -= dt;
+          const dx = state.player.x - alien.x;
+          const sideStep = Math.sin(performance.now() * 0.006 + alien.x) > 0 ? 1 : -1;
+          if (Math.abs(dx) < 24) {
+            alien.x += sideStep * 95 * dt;
+            alien.vx = sideStep * 60;
+          } else {
+            alien.x += Math.sign(dx) * 70 * dt;
+          }
+          if (alien.y >= GROUND_Y - 27 && alien.jumpTimer <= 0) {
+            alien.vy = -430 - Math.random() * 110;
+            alien.vx = clamp(dx * 1.8, -280, 280) + sideStep * 65;
+            alien.jumpTimer = 0.55 + Math.random() * 0.45;
+          }
+        }
         if (rectsOverlap(playerRect(), { x: alien.x - 18, y: alien.y - 28, w: 36, h: 36 })) hurtPlayer(11);
       }
 
