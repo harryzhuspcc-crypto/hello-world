@@ -16,7 +16,7 @@ export function meta({}: Route.MetaArgs) {
 type Bullet = { x: number; y: number; vx: number; vy?: number; life: number; damage: number; enemy: boolean; low: boolean };
 type Robot = { x: number; y: number; hp: number; maxHp: number; speed: number; active: boolean; flash: number; shootTimer: number; type: "walker" | "gunner" | "tank" };
 type Crawler = { x: number; y: number; hp: number; dead: boolean; flash: number };
-type Alien = { x: number; y: number; vx: number; vy: number; hp: number; flash: number; active: boolean; jumpTimer: number };
+type Alien = { x: number; y: number; vx: number; vy: number; hp: number; flash: number; active: boolean; jumpTimer: number; targetDir: -1 | 1 };
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; color: string; size: number };
 type Cannon = { ox: number; oy: number; hp: number; maxHp: number; dead: boolean; flash: number; cooldown: number };
 
@@ -27,6 +27,11 @@ const PLAYER_H = 76;
 const DUCK_H = 44;
 const BOSS_X = 4450;
 const FINISH_X = 5050;
+const BOSS_LEFT_X = BOSS_X - 120;
+const BOSS_RIGHT_X = FINISH_X - 95;
+const ALIEN_JUMP_VX = 255;
+const ALIEN_JUMP_VY = -470;
+const ALIEN_JUMP_DELAY = 0.62;
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -239,10 +244,10 @@ export default function RogueBlaster() {
         heli.dropTimer -= dt;
         const livingAlien = state.aliens.some((alien) => alien.hp > 0);
         if (heli.aliensDropped < 10 && !livingAlien && heli.dropTimer <= 0) {
-          state.aliens.push({ x: heli.x + (Math.random() - 0.5) * 80, y: heli.y + 70, vx: (Math.random() - 0.5) * 80, vy: 0, hp: 2, flash: 0, active: false, jumpTimer: 0.2 });
+          state.aliens.push({ x: clamp(heli.x, BOSS_LEFT_X + 90, BOSS_RIGHT_X - 90), y: heli.y + 70, vx: 0, vy: 0, hp: 2, flash: 0, active: false, jumpTimer: 0.2, targetDir: -1 });
           heli.aliensDropped += 1;
           heli.dropTimer = 0.7;
-          state.message = `Alien ${heli.aliensDropped}/10 dropped — it will jump at you!`;
+          state.message = `Alien ${heli.aliensDropped}/10 dropped — it jumps left edge, then right edge!`;
         }
         if (heli.aliensDropped >= 10 && state.aliens.every((alien) => alien.hp <= 0)) {
           state.bossPhase = "attack";
@@ -332,19 +337,19 @@ export default function RogueBlaster() {
         }
         if (alien.active) {
           alien.jumpTimer -= dt;
-          const dx = state.player.x - alien.x;
-          const sideStep = Math.sin(performance.now() * 0.006 + alien.x) > 0 ? 1 : -1;
-          if (Math.abs(dx) < 24) {
-            alien.x += sideStep * 95 * dt;
-            alien.vx = sideStep * 60;
-          } else {
-            alien.x += Math.sign(dx) * 70 * dt;
+          if (alien.x <= BOSS_LEFT_X + 18) alien.targetDir = 1;
+          if (alien.x >= BOSS_RIGHT_X - 18) alien.targetDir = -1;
+          const onTopOfPlayer = Math.abs(state.player.x - alien.x) < 24;
+          if (onTopOfPlayer) {
+            const escapeDir = alien.targetDir === 1 ? 1 : -1;
+            alien.x += escapeDir * 85 * dt;
           }
           if (alien.y >= GROUND_Y - 27 && alien.jumpTimer <= 0) {
-            alien.vy = -430 - Math.random() * 110;
-            alien.vx = clamp(dx * 1.8, -280, 280) + sideStep * 65;
-            alien.jumpTimer = 0.55 + Math.random() * 0.45;
+            alien.vy = ALIEN_JUMP_VY;
+            alien.vx = alien.targetDir * ALIEN_JUMP_VX;
+            alien.jumpTimer = ALIEN_JUMP_DELAY;
           }
+          alien.x = clamp(alien.x, BOSS_LEFT_X, BOSS_RIGHT_X);
         }
         if (rectsOverlap(playerRect(), { x: alien.x - 18, y: alien.y - 28, w: 36, h: 36 })) hurtPlayer(11);
       }
