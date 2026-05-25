@@ -33,6 +33,7 @@ const BOSS_RIGHT_X = FINISH_X - 95;
 const ALIEN_JUMP_VX = 255;
 const ALIEN_JUMP_VY = -470;
 const ALIEN_JUMP_DELAY = 0.62;
+const BOSS_ATTACK_Y = 395;
 const BOSS_LANES: BossLane[] = ["high", "mid", "low"];
 
 function clamp(value: number, min: number, max: number) {
@@ -159,7 +160,7 @@ export default function RogueBlaster() {
         { ox: 0, oy: 58, hp: 9, maxHp: 9, dead: false, flash: 0, cooldown: 1.2 },
         { ox: 88, oy: 42, hp: 7, maxHp: 7, dead: false, flash: 0, cooldown: 1.6 },
       ];
-      state.message = "Go forward. Duck to shoot ground mines. Jump-shoot boss cannons.";
+      state.message = "Go forward. Duck to shoot ground mines. Shoot boss cannons while dodging.";
     };
 
     const playerRect = () => {
@@ -256,7 +257,7 @@ export default function RogueBlaster() {
     const updateBoss = (dt: number) => {
       if (!state.bossStarted || state.bossPhase === "dead") return;
       const heli = state.helicopter;
-      const frontX = clamp(state.player.x + 270, BOSS_X + 180, FINISH_X - 240);
+      const frontX = clamp(state.player.x + 235, BOSS_X + 160, FINISH_X - 240);
       heli.y += (heli.targetY - heli.y) * 0.04;
       if (state.bossPhase === "drop") {
         heli.x += (frontX - heli.x) * 0.025;
@@ -270,8 +271,8 @@ export default function RogueBlaster() {
         }
         if (heli.aliensDropped >= 10 && state.aliens.every((alien) => alien.hp <= 0)) {
           state.bossPhase = "attack";
-          heli.targetY = 315;
-          state.message = "Helicopter is dropping in front of you. Jump and shoot the cannons!";
+          heli.targetY = BOSS_ATTACK_Y;
+          state.message = "Helicopter is landing right in front of you. Shoot straight and dodge!";
         }
       } else if (state.bossPhase === "attack") {
         heli.x += (frontX - heli.x) * 0.08;
@@ -284,9 +285,9 @@ export default function RogueBlaster() {
           const cannon = liveCannons[Math.floor(Math.random() * liveCannons.length)];
           const lane = BOSS_LANES[Math.floor(Math.random() * BOSS_LANES.length)];
           cannon.flash = 1;
-          state.bullets.push({ x: heli.x - 140, y: bossLaneY(lane), vx: -520, life: 1.55, damage: 13, enemy: true, low: false, lane });
+          state.bullets.push({ x: heli.x - 140, y: bossLaneY(lane), vx: -430, life: 1.8, damage: 9, enemy: true, low: false, lane });
           state.message = bossLaneMessage(lane);
-          state.bossShotTimer = 0.95;
+          state.bossShotTimer = 1.25;
         }
         if (state.cannons.every((cannon) => cannon.dead)) {
           state.bossPhase = "dead";
@@ -723,7 +724,7 @@ export default function RogueBlaster() {
         <div className="rounded-3xl border border-white/10 bg-black/50 px-5 py-4 shadow-2xl backdrop-blur-md">
           <p className="text-xs font-black uppercase tracking-[0.28em] text-cyan-200">Rough Run</p>
           <h1 className="text-2xl font-black">Robot Silius Mission</h1>
-          <p className="mt-1 text-sm font-bold text-slate-300">Run, jump-shoot, duck-shoot ground mines, then destroy helicopter cannons.</p>
+          <p className="mt-1 text-sm font-bold text-slate-300">Run, dodge high/mid/low fire, duck-shoot ground mines, then shoot helicopter cannons straight ahead.</p>
         </div>
         <Link className="pointer-events-auto rounded-full bg-white px-5 py-3 text-xs font-black uppercase tracking-[0.2em] text-slate-950 shadow-xl transition hover:-translate-y-1 hover:bg-cyan-100" to="/">
           Back to Lobby
