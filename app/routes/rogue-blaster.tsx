@@ -53,6 +53,8 @@ const BOSS_LANES: BossLane[] = ["high", "mid", "low"];
 const STAGE2_GIANT_X = 2550;
 const STAGE3_SMALLBOT_DAMAGE = 50;
 const STAGE_MAX = 5;
+const MACHINE_SAFE_X = BOSS_X - 370;
+const MACHINE_SAFE_W = 175;
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -143,7 +145,7 @@ function makeFloorTraps(stage: number): FloorTrap[] {
 }
 
 function makeMachineBoss(): MachineBoss {
-  return { x: BOSS_X + 280, hp: 58, maxHp: 58, active: false, flash: 0, shotTimer: 0.8 };
+  return { x: BOSS_X + 280, hp: 34, maxHp: 34, active: false, flash: 0, shotTimer: 1.35 };
 }
 
 function makeCannonBoss(): CannonBoss {
@@ -338,6 +340,14 @@ export default function RogueBlaster() {
       const height = state.player.duck ? DUCK_H : PLAYER_H;
       return { x: state.player.x - PLAYER_W / 2, y: state.player.y + PLAYER_H - height, w: PLAYER_W, h: height };
     };
+
+    const inMachineSafeSpot = () =>
+      state.stage === 3 &&
+      state.bossStarted &&
+      state.machineBoss.hp > 0 &&
+      state.player.x > MACHINE_SAFE_X &&
+      state.player.x < MACHINE_SAFE_X + MACHINE_SAFE_W &&
+      state.player.y >= GROUND_Y - PLAYER_H - 4;
     const loseLife = () => {
       state.lives -= 1;
       if (state.lives <= 0) {
@@ -631,17 +641,17 @@ export default function RogueBlaster() {
         boss.x += (BOSS_X + 250 - boss.x) * 0.04;
         boss.shotTimer -= dt;
         if (boss.shotTimer <= 0) {
-          const guns = [[-86, -118], [0, -152], [86, -118], [-118, -42], [118, -42]];
+          const guns = [[-86, -118], [86, -118], [0, -152]];
           for (const [ox, oy] of guns) {
             const sx = boss.x + ox;
             const sy = GROUND_Y + oy;
             const dx = p.x - sx;
             const dy = p.y + 35 - sy;
             const len = Math.hypot(dx, dy) || 1;
-            state.bullets.push({ x: sx, y: sy, vx: (dx / len) * 360, vy: (dy / len) * 360, life: 1.6, damage: 8, enemy: true, low: false });
+            state.bullets.push({ x: sx, y: sy, vx: (dx / len) * 300, vy: (dy / len) * 300, life: 1.8, damage: 5, enemy: true, low: false });
           }
-          boss.shotTimer = 0.85;
-          state.message = "Machine boss: bullets from all guns! Jump-shoot the top weak spot.";
+          boss.shotTimer = 1.45;
+          state.message = inMachineSafeSpot() ? "Safe alcove: stay here to hide, step out to jump-shoot the weak spot." : "Machine boss: use the safe alcove, then step out and jump-shoot the weak spot.";
         }
       }
       if (state.stage === 4 && state.bossStarted && state.cannonBoss.hp > 0) {
@@ -866,7 +876,11 @@ export default function RogueBlaster() {
           const enemyBulletRect = bullet.lane ? { x: bullet.x - 20, y: bullet.y - 5, w: 40, h: 10 } : { x: bullet.x - 5, y: bullet.y - 5, w: 10, h: 10 };
           if (rectsOverlap(playerRect(), enemyBulletRect)) {
             bullet.life = 0;
-            hurtPlayer(bullet.damage);
+            if (inMachineSafeSpot()) {
+              state.message = "Safe spot blocked the machine fire — step out only when you shoot.";
+            } else {
+              hurtPlayer(bullet.damage);
+            }
           }
           continue;
         }
@@ -958,9 +972,13 @@ export default function RogueBlaster() {
           }
         }
         if (state.stage === 3 && state.bossStarted && state.machineBoss.hp > 0 && bullet.life > 0 && rectsOverlap({ x: bullet.x - 7, y: bullet.y - 4, w: 14, h: 8 }, { x: state.machineBoss.x - 34, y: GROUND_Y - 220, w: 68, h: 54 })) {
-          state.machineBoss.hp -= 1;
-          state.machineBoss.flash = 1;
           bullet.life = 0;
+          if (inMachineSafeSpot()) {
+            state.message = "You are safe there, but the wall blocks the angle — step out to damage it!";
+          } else {
+            state.machineBoss.hp -= 1;
+            state.machineBoss.flash = 1;
+          }
         }
         if (state.stage === 4 && state.bossStarted && state.cannonBoss.hp > 0 && bullet.life > 0 && rectsOverlap({ x: bullet.x - 7, y: bullet.y - 4, w: 14, h: 8 }, { x: state.cannonBoss.x - 36, y: GROUND_Y - 174, w: 72, h: 58 })) {
           state.cannonBoss.hp -= 1;
@@ -1387,6 +1405,15 @@ export default function RogueBlaster() {
         }
       }
       if (state.stage === 3 && state.bossStarted && state.machineBoss.hp > 0) {
+        ctx.fillStyle = "rgba(15,23,42,0.9)";
+        ctx.fillRect(MACHINE_SAFE_X, GROUND_Y - 92, MACHINE_SAFE_W, 92);
+        ctx.fillStyle = "rgba(96,165,250,0.32)";
+        ctx.fillRect(MACHINE_SAFE_X + 10, GROUND_Y - 82, MACHINE_SAFE_W - 20, 72);
+        ctx.fillStyle = "#bfdbfe";
+        ctx.font = "900 13px Inter, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("SAFE", MACHINE_SAFE_X + MACHINE_SAFE_W / 2, GROUND_Y - 54);
+        ctx.fillText("STEP OUT TO SHOOT", MACHINE_SAFE_X + MACHINE_SAFE_W / 2, GROUND_Y - 34);
         const b = state.machineBoss;
         ctx.save();
         ctx.translate(b.x, GROUND_Y);
