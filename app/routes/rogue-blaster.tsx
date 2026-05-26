@@ -27,6 +27,9 @@ type Wave = { x: number; y: number; vx: number; life: number };
 type GiantBot = { x: number; hp: number; maxHp: number; active: boolean; flash: number; hitTimer: number };
 type TankBoss = { x: number; hp: number; maxHp: number; active: boolean; flash: number; bombTimer: number };
 type Bomb = { x: number; y: number; vy: number; life: number; warn: number };
+type Stage3Bot = { x: number; hp: number; maxHp: number; active: boolean; flash: number; hitTimer: number; speed: number };
+type SmallBot = { x: number; hp: number; maxHp: number; active: boolean; flash: number; hitTimer: number };
+type Elevator = { x: number; y: number; minY: number; maxY: number; vy: number; w: number };
 
 const GROUND_Y = 500;
 const WORLD_W = 5200;
@@ -43,6 +46,7 @@ const ALIEN_JUMP_DELAY = 0.62;
 const BOSS_ATTACK_Y = 395;
 const BOSS_LANES: BossLane[] = ["high", "mid", "low"];
 const STAGE2_GIANT_X = 2550;
+const STAGE3_SMALLBOT_DAMAGE = 50;
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -107,6 +111,26 @@ function makeTankBoss(): TankBoss {
   return { x: BOSS_X + 260, hp: 70, maxHp: 70, active: false, flash: 0, bombTimer: 1.2 };
 }
 
+function makeStage3Robots(): Stage3Bot[] {
+  return [420, 610, 850, 1120, 1280, 1510, 1760, 2050, 2230, 2460, 2680, 2860, 3150, 3370, 3650, 3880, 4120, 4380].map((x, i) => ({
+    x,
+    hp: 3 + (i % 3),
+    maxHp: 3 + (i % 3),
+    active: false,
+    flash: 0,
+    hitTimer: 0,
+    speed: 32 + (i % 4) * 7,
+  }));
+}
+
+function makeStage3SmallBots(): SmallBot[] {
+  return [720, 1420, 2320, 3020, 3940].map((x) => ({ x, hp: 7, maxHp: 7, active: false, flash: 0, hitTimer: 0 }));
+}
+
+function makeStage3Elevators(): Elevator[] {
+  return [980, 1880, 2920, 3760].map((x, i) => ({ x, y: GROUND_Y - 16 - (i % 2) * 120, minY: GROUND_Y - 175, maxY: GROUND_Y - 16, vy: i % 2 === 0 ? -70 : 70, w: 118 }));
+}
+
 function burst(particles: Particle[], x: number, y: number, color: string, count: number) {
   for (let i = 0; i < count; i += 1) {
     const angle = Math.random() * Math.PI * 2;
@@ -138,6 +162,9 @@ export default function RogueBlaster() {
       bombs: [] as Bomb[],
       giantBot: makeGiantBot(),
       tankBoss: makeTankBoss(),
+      stage3Robots: [] as Stage3Bot[],
+      smallBots: [] as SmallBot[],
+      elevators: [] as Elevator[],
       bullets: [] as Bullet[],
       particles: [] as Particle[],
       cameraX: 0,
@@ -183,6 +210,9 @@ export default function RogueBlaster() {
       state.bombs = [];
       state.giantBot = makeGiantBot();
       state.tankBoss = makeTankBoss();
+      state.stage3Robots = [];
+      state.smallBots = [];
+      state.elevators = [];
       state.bullets = [];
       state.particles = [];
       state.cameraX = 0;
@@ -216,6 +246,9 @@ export default function RogueBlaster() {
       state.bombs = [];
       state.giantBot = makeGiantBot();
       state.tankBoss = makeTankBoss();
+      state.stage3Robots = [];
+      state.smallBots = [];
+      state.elevators = [];
       state.bullets = [];
       state.particles = [];
       state.cameraX = 0;
@@ -223,6 +256,28 @@ export default function RogueBlaster() {
       state.bossPhase = "drop";
       state.bossShotTimer = 1.2;
       state.message = "Stage 2: green robot lab. Infinite bullets — jump-shoot drones!";
+    };
+
+    const startStage3 = () => {
+      state.stage = 3;
+      state.player = { ...state.player, x: 90, y: GROUND_Y - PLAYER_H, vy: 0, hp: Math.min(state.player.maxHp, state.player.hp + 55), facing: 1, duck: false, cooldown: 0, invuln: 1.3, reload: 0 };
+      state.robots = [];
+      state.crawlers = [];
+      state.aliens = [];
+      state.drones = [];
+      state.launchers = [];
+      state.missiles = [];
+      state.waves = [];
+      state.bombs = [];
+      state.stage3Robots = makeStage3Robots();
+      state.smallBots = makeStage3SmallBots();
+      state.elevators = makeStage3Elevators();
+      state.bullets = [];
+      state.particles = [];
+      state.cameraX = 0;
+      state.bossStarted = false;
+      state.bossPhase = "drop";
+      state.message = "Stage 3: enemy-packed robot elevator shaft. Small robots hit for 50!";
     };
 
     const playerRect = () => {
@@ -468,6 +523,63 @@ export default function RogueBlaster() {
       state.bombs = state.bombs.filter((bomb) => bomb.life > 0);
     };
 
+    const updateStage3 = (dt: number) => {
+      const p = state.player;
+      for (const elevator of state.elevators) {
+        const lastY = elevator.y;
+        elevator.y += elevator.vy * dt;
+        if (elevator.y <= elevator.minY) {
+          elevator.y = elevator.minY;
+          elevator.vy = Math.abs(elevator.vy);
+        }
+        if (elevator.y >= elevator.maxY) {
+          elevator.y = elevator.maxY;
+          elevator.vy = -Math.abs(elevator.vy);
+        }
+        const platform = { x: elevator.x - elevator.w / 2, y: elevator.y - 12, w: elevator.w, h: 16 };
+        const feet = { x: p.x - PLAYER_W / 2, y: p.y + PLAYER_H - 5, w: PLAYER_W, h: 10 };
+        if (p.vy >= -40 && rectsOverlap(feet, platform)) {
+          p.y = elevator.y - 12 - PLAYER_H;
+          p.vy = 0;
+          p.y += elevator.y - lastY;
+          state.message = "Elevator platform: ride it down and up through the robot shaft.";
+        }
+      }
+
+      for (const robot of state.stage3Robots) {
+        if (robot.hp <= 0) continue;
+        robot.flash = Math.max(0, robot.flash - dt * 8);
+        robot.hitTimer = Math.max(0, robot.hitTimer - dt);
+        if (Math.abs(robot.x - p.x) < 650) robot.active = true;
+        if (!robot.active) continue;
+        robot.x += Math.sign(p.x - robot.x) * robot.speed * dt;
+        if (rectsOverlap(playerRect(), { x: robot.x - 22, y: GROUND_Y - 74, w: 44, h: 74 }) && robot.hitTimer <= 0) {
+          hurtPlayer(9);
+          robot.hitTimer = 0.7;
+        }
+      }
+
+      for (const bot of state.smallBots) {
+        if (bot.hp <= 0) continue;
+        bot.flash = Math.max(0, bot.flash - dt * 8);
+        bot.hitTimer = Math.max(0, bot.hitTimer - dt);
+        if (Math.abs(bot.x - p.x) < 720) bot.active = true;
+        if (!bot.active) continue;
+        bot.x += Math.sign(p.x - bot.x) * 21 * dt;
+        if (rectsOverlap(playerRect(), { x: bot.x - 16, y: GROUND_Y - 24, w: 32, h: 24 }) && bot.hitTimer <= 0) {
+          hurtPlayer(STAGE3_SMALLBOT_DAMAGE);
+          bot.hitTimer = 1.0;
+          state.message = "Tiny slow bot hit you for 50 suit damage!";
+        }
+      }
+
+      if (p.x > FINISH_X - 160) {
+        state.won = true;
+        state.score += 12000;
+        state.message = "Stage 3 clear — elevator robot sector survived!";
+      }
+    };
+
     const update = (dt: number) => {
       if (!state.started || state.gameOver || state.won) return;
       const p = state.player;
@@ -504,8 +616,10 @@ export default function RogueBlaster() {
       if (state.stage === 1) {
         updateRobots(dt);
         updateBoss(dt);
-      } else {
+      } else if (state.stage === 2) {
         updateStage2(dt);
+      } else {
+        updateStage3(dt);
       }
 
       if (state.stage === 1) {
@@ -609,6 +723,34 @@ export default function RogueBlaster() {
             }
           }
         }
+        if (state.stage === 3) {
+          for (const robot of state.stage3Robots) {
+            if (robot.hp <= 0 || bullet.life <= 0) continue;
+            if (rectsOverlap({ x: bullet.x - 7, y: bullet.y - 4, w: 14, h: 8 }, { x: robot.x - 22, y: GROUND_Y - 74, w: 44, h: 74 })) {
+              robot.hp -= 1;
+              robot.flash = 1;
+              bullet.life = 0;
+              if (robot.hp <= 0) {
+                state.score += 320;
+                state.kills += 1;
+                burst(state.particles, robot.x, GROUND_Y - 38, "#93c5fd", 18);
+              }
+            }
+          }
+          for (const bot of state.smallBots) {
+            if (bot.hp <= 0 || bullet.life <= 0) continue;
+            if (rectsOverlap({ x: bullet.x - 7, y: bullet.y - 4, w: 14, h: 8 }, { x: bot.x - 17, y: GROUND_Y - 26, w: 34, h: 26 })) {
+              bot.hp -= 1;
+              bot.flash = 1;
+              bullet.life = 0;
+              if (bot.hp <= 0) {
+                state.score += 900;
+                state.kills += 1;
+                burst(state.particles, bot.x, GROUND_Y - 14, "#fca5a5", 22);
+              }
+            }
+          }
+        }
         if (state.stage === 2) {
           for (const drone of state.drones) {
             if (drone.hp <= 0 || bullet.life <= 0) continue;
@@ -668,9 +810,9 @@ export default function RogueBlaster() {
             bullet.life = 0;
             if (tank.hp <= 0) {
               state.score += 10000;
-              state.won = true;
-              state.message = "Stage 2 lab tank defeated — mission complete!";
+              state.message = "Stage 2 tank defeated — going down to Stage 3!";
               burst(state.particles, tank.x, GROUND_Y - 55, "#fde047", 90);
+              startStage3();
             }
           }
         }
@@ -947,11 +1089,56 @@ export default function RogueBlaster() {
       }
     };
 
+    const drawStage3Enemy = () => {
+      for (const elevator of state.elevators) {
+        ctx.fillStyle = "#475569";
+        ctx.fillRect(elevator.x - elevator.w / 2, elevator.y - 12, elevator.w, 16);
+        ctx.fillStyle = "#93c5fd";
+        ctx.fillRect(elevator.x - elevator.w / 2 + 8, elevator.y - 8, elevator.w - 16, 4);
+        ctx.strokeStyle = "rgba(147,197,253,0.45)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(elevator.x - elevator.w / 2, 170);
+        ctx.lineTo(elevator.x - elevator.w / 2, GROUND_Y);
+        ctx.moveTo(elevator.x + elevator.w / 2, 170);
+        ctx.lineTo(elevator.x + elevator.w / 2, GROUND_Y);
+        ctx.stroke();
+      }
+      for (const robot of state.stage3Robots) {
+        if (robot.hp <= 0) continue;
+        ctx.save();
+        ctx.translate(robot.x, GROUND_Y);
+        ctx.fillStyle = robot.flash > 0 ? "white" : "#60a5fa";
+        ctx.fillRect(-22, -62, 44, 52);
+        ctx.fillStyle = "#1e3a8a";
+        ctx.fillRect(-17, -78, 34, 22);
+        ctx.fillStyle = "#bfdbfe";
+        ctx.fillRect(-10, -71, 20, 5);
+        ctx.fillStyle = "#1d4ed8";
+        ctx.fillRect(-27, -44, 9, 32);
+        ctx.fillRect(18, -44, 9, 32);
+        ctx.restore();
+      }
+      for (const bot of state.smallBots) {
+        if (bot.hp <= 0) continue;
+        ctx.fillStyle = bot.flash > 0 ? "white" : "#ef4444";
+        ctx.fillRect(bot.x - 17, GROUND_Y - 24, 34, 24);
+        ctx.fillStyle = "#7f1d1d";
+        ctx.fillRect(bot.x - 12, GROUND_Y - 17, 24, 7);
+        ctx.fillStyle = "#fecaca";
+        ctx.fillRect(bot.x - 5, GROUND_Y - 15, 10, 3);
+      }
+    };
+
     const draw = () => {
       const w = window.innerWidth;
       const h = window.innerHeight;
       const sky = ctx.createLinearGradient(0, 0, 0, h);
-      if (state.stage === 2) {
+      if (state.stage === 3) {
+        sky.addColorStop(0, "#020617");
+        sky.addColorStop(0.5, "#1e293b");
+        sky.addColorStop(1, "#334155");
+      } else if (state.stage === 2) {
         sky.addColorStop(0, "#02130b");
         sky.addColorStop(0.5, "#064e3b");
         sky.addColorStop(1, "#14532d");
@@ -968,7 +1155,13 @@ export default function RogueBlaster() {
       ctx.save();
       ctx.translate(-state.cameraX, 0);
       for (let x = -200; x < FINISH_X + 700; x += 340) {
-        if (state.stage === 2) {
+        if (state.stage === 3) {
+          ctx.fillStyle = x % 680 === 0 ? "#0f172a" : "#1e293b";
+          ctx.fillRect(x, 130, 170, GROUND_Y - 130);
+          ctx.fillStyle = "rgba(147,197,253,0.18)";
+          ctx.fillRect(x + 22, 165, 112, 26);
+          ctx.fillRect(x + 44, 250, 70, 170);
+        } else if (state.stage === 2) {
           ctx.fillStyle = x % 680 === 0 ? "#052e16" : "#064e3b";
           ctx.fillRect(x, 165, 145, GROUND_Y - 165);
           ctx.fillStyle = "rgba(187,247,208,0.22)";
@@ -986,9 +1179,9 @@ export default function RogueBlaster() {
           ctx.fillRect(x + 204, GROUND_Y - 132, 20, 132);
         }
       }
-      ctx.fillStyle = state.stage === 2 ? "#052e16" : "#3b0764";
+      ctx.fillStyle = state.stage === 3 ? "#0f172a" : state.stage === 2 ? "#052e16" : "#3b0764";
       ctx.fillRect(-200, GROUND_Y, FINISH_X + 900, 170);
-      ctx.fillStyle = state.stage === 2 ? "rgba(190,242,100,0.35)" : "rgba(103,232,249,0.35)";
+      ctx.fillStyle = state.stage === 3 ? "rgba(147,197,253,0.35)" : state.stage === 2 ? "rgba(190,242,100,0.35)" : "rgba(103,232,249,0.35)";
       for (let x = 0; x < FINISH_X + 500; x += 150) ctx.fillRect(x, GROUND_Y + 58, 70, 8);
       ctx.fillStyle = "rgba(15,23,42,0.45)";
       for (let x = 40; x < FINISH_X + 500; x += 330) {
@@ -1017,6 +1210,7 @@ export default function RogueBlaster() {
       for (const robot of state.robots) drawRobot(robot);
       for (const alien of state.aliens) drawAlien(alien);
       if (state.stage === 2) drawStage2Enemy();
+      if (state.stage === 3) drawStage3Enemy();
       drawBoss();
       for (const bullet of state.bullets) {
         if (bullet.enemy && bullet.lane) {
@@ -1058,7 +1252,7 @@ export default function RogueBlaster() {
       }
 
       if (hudRef.current) {
-        hudRef.current.innerHTML = `<div><span>Stage</span><strong>${state.stage}/2</strong></div><div><span>Suit</span><strong>${Math.round(state.player.hp)}/${state.player.maxHp}</strong></div><div><span>Cells</span><strong>∞</strong></div><div><span>Robots</span><strong>${state.kills}</strong></div><div><span>Boss</span><strong>${state.bossStarted ? (state.stage === 2 ? "tank" : state.bossPhase) : "Ahead"}</strong></div><div><span>Tip</span><strong>${state.message}</strong></div>`;
+        hudRef.current.innerHTML = `<div><span>Stage</span><strong>${state.stage}/3</strong></div><div><span>Suit</span><strong>${Math.round(state.player.hp)}/${state.player.maxHp}</strong></div><div><span>Cells</span><strong>∞</strong></div><div><span>Robots</span><strong>${state.kills}</strong></div><div><span>Boss</span><strong>${state.bossStarted ? (state.stage === 2 ? "tank" : state.bossPhase) : "Ahead"}</strong></div><div><span>Tip</span><strong>${state.message}</strong></div>`;
       }
     };
 
