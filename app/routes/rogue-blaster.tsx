@@ -203,6 +203,7 @@ export default function RogueBlaster() {
       started: false,
       gameOver: false,
       won: false,
+      lives: 3,
       score: 0,
       kills: 0,
       bossStarted: false,
@@ -256,6 +257,7 @@ export default function RogueBlaster() {
       state.started = true;
       state.gameOver = false;
       state.won = false;
+      state.lives = 3;
       state.score = 0;
       state.kills = 0;
       state.bossStarted = false;
@@ -336,16 +338,27 @@ export default function RogueBlaster() {
       const height = state.player.duck ? DUCK_H : PLAYER_H;
       return { x: state.player.x - PLAYER_W / 2, y: state.player.y + PLAYER_H - height, w: PLAYER_W, h: height };
     };
+    const loseLife = () => {
+      state.lives -= 1;
+      if (state.lives <= 0) {
+        state.player.hp = 0;
+        state.gameOver = true;
+        state.message = "No lives left! Press R or click to restart from Stage 1.";
+        return;
+      }
+      state.player = { ...state.player, x: 90, y: GROUND_Y - PLAYER_H, vy: 0, hp: state.player.maxHp, duck: false, cooldown: 0, invuln: 1.8 };
+      state.bullets = state.bullets.filter((bullet) => !bullet.enemy);
+      state.particles = [];
+      state.cameraX = 0;
+      state.message = `Life lost — ${state.lives} ${state.lives === 1 ? "life" : "lives"} left. Respawned at Stage ${state.stage}.`;
+    };
+
     const hurtPlayer = (amount: number) => {
       if (state.player.invuln > 0 || state.gameOver || state.won) return;
       state.player.hp -= amount;
       state.player.invuln = 0.45;
       burst(state.particles, state.player.x, state.player.y + 24, "#fecaca", 14);
-      if (state.player.hp <= 0) {
-        state.player.hp = 0;
-        state.gameOver = true;
-        state.message = "Destroyed! Press R or click to restart.";
-      }
+      if (state.player.hp <= 0) loseLife();
     };
 
     const shoot = () => {
@@ -1549,7 +1562,7 @@ export default function RogueBlaster() {
       }
 
       if (hudRef.current) {
-        hudRef.current.innerHTML = `<div><span>Stage</span><strong>${state.stage}/${STAGE_MAX}</strong></div><div><span>Suit</span><strong>${Math.round(state.player.hp)}/${state.player.maxHp}</strong></div><div><span>Cells</span><strong>∞</strong></div><div><span>Robots</span><strong>${state.kills}</strong></div><div><span>Boss</span><strong>${state.bossStarted ? (state.stage === 2 ? "tank" : state.stage === 3 ? "machine" : state.stage === 4 ? "cannon" : state.stage === 5 ? "warship" : state.bossPhase) : "Ahead"}</strong></div><div><span>Tip</span><strong>${state.message}</strong></div>`;
+        hudRef.current.innerHTML = `<div><span>Stage</span><strong>${state.stage}/${STAGE_MAX}</strong></div><div><span>Suit</span><strong>${Math.round(state.player.hp)}/${state.player.maxHp}</strong></div><div><span>Lives</span><strong>${state.lives}/3</strong></div><div><span>Cells</span><strong>∞</strong></div><div><span>Boss</span><strong>${state.bossStarted ? (state.stage === 2 ? "tank" : state.stage === 3 ? "machine" : state.stage === 4 ? "cannon" : state.stage === 5 ? "warship" : state.bossPhase) : "Ahead"}</strong></div><div><span>Tip</span><strong>${state.message}</strong></div>`;
       }
     };
 
@@ -1579,7 +1592,7 @@ export default function RogueBlaster() {
         <div className="rounded-3xl border border-white/10 bg-black/50 px-5 py-4 shadow-2xl backdrop-blur-md">
           <p className="text-xs font-black uppercase tracking-[0.28em] text-cyan-200">Rough Run</p>
           <h1 className="text-2xl font-black">Robot Silius Mission</h1>
-          <p className="mt-1 text-sm font-bold text-slate-300">Five-stage run: drones, elevators over lava, pop-up floor guns, machine/cannon bosses, spaceship chase, and final robot duel.</p>
+          <p className="mt-1 text-sm font-bold text-slate-300">Five-stage run with 3 lives from Stage 1: drones, lava elevators, pop-up floor guns, bosses, spaceship chase, and final robot duel.</p>
         </div>
         <Link className="pointer-events-auto rounded-full bg-white px-5 py-3 text-xs font-black uppercase tracking-[0.2em] text-slate-950 shadow-xl transition hover:-translate-y-1 hover:bg-cyan-100" to="/">
           Back to Lobby
