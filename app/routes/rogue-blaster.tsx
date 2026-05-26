@@ -30,6 +30,11 @@ type Bomb = { x: number; y: number; vy: number; life: number; warn: number };
 type Stage3Bot = { x: number; hp: number; maxHp: number; active: boolean; flash: number; hitTimer: number; speed: number };
 type SmallBot = { x: number; hp: number; maxHp: number; active: boolean; flash: number; hitTimer: number };
 type Elevator = { x: number; y: number; minY: number; maxY: number; vy: number; w: number };
+type FloorTrap = { x: number; hp: number; maxHp: number; active: boolean; flash: number; popTimer: number; fireTimer: number; popped: boolean };
+type MachineBoss = { x: number; hp: number; maxHp: number; active: boolean; flash: number; shotTimer: number };
+type CannonBoss = { x: number; hp: number; maxHp: number; active: boolean; flash: number; shotTimer: number; chargeTimer: number; laserTimer: number };
+type SpaceshipBoss = { x: number; y: number; hp: number; maxHp: number; active: boolean; flash: number; shotTimer: number; phase: "pass" | "retreat" | "dead" };
+type FinalRobot = { x: number; hp: number; maxHp: number; active: boolean; flash: number; hitTimer: number; dir: -1 | 1; duckTimer: number };
 
 const GROUND_Y = 500;
 const WORLD_W = 5200;
@@ -47,6 +52,7 @@ const BOSS_ATTACK_Y = 395;
 const BOSS_LANES: BossLane[] = ["high", "mid", "low"];
 const STAGE2_GIANT_X = 2550;
 const STAGE3_SMALLBOT_DAMAGE = 50;
+const STAGE_MAX = 5;
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -131,6 +137,27 @@ function makeStage3Elevators(): Elevator[] {
   return [980, 1880, 2920, 3760].map((x, i) => ({ x, y: GROUND_Y - 16 - (i % 2) * 120, minY: GROUND_Y - 175, maxY: GROUND_Y - 16, vy: i % 2 === 0 ? -70 : 70, w: 118 }));
 }
 
+function makeFloorTraps(stage: number): FloorTrap[] {
+  const xs = stage === 5 ? [520, 1050, 1540, 2120, 2750, 3460, 4160] : stage === 4 ? [620, 1180, 1740, 2380, 3040, 3720, 4300] : [540, 1160, 1710, 2470, 3330, 4020];
+  return xs.map((x, i) => ({ x, hp: 3, maxHp: 3, active: false, flash: 0, popTimer: 0.7 + i * 0.15, fireTimer: 0.9, popped: false }));
+}
+
+function makeMachineBoss(): MachineBoss {
+  return { x: BOSS_X + 280, hp: 58, maxHp: 58, active: false, flash: 0, shotTimer: 0.8 };
+}
+
+function makeCannonBoss(): CannonBoss {
+  return { x: BOSS_X + 270, hp: 64, maxHp: 64, active: false, flash: 0, shotTimer: 0.85, chargeTimer: 2.2, laserTimer: 0 };
+}
+
+function makeSpaceshipBoss(): SpaceshipBoss {
+  return { x: BOSS_X + 640, y: 335, hp: 46, maxHp: 46, active: false, flash: 0, shotTimer: 0.45, phase: "pass" };
+}
+
+function makeFinalRobot(): FinalRobot {
+  return { x: FINISH_X - 220, hp: 72, maxHp: 72, active: false, flash: 0, hitTimer: 0, dir: -1, duckTimer: 0 };
+}
+
 function burst(particles: Particle[], x: number, y: number, color: string, count: number) {
   for (let i = 0; i < count; i += 1) {
     const angle = Math.random() * Math.PI * 2;
@@ -165,6 +192,11 @@ export default function RogueBlaster() {
       stage3Robots: [] as Stage3Bot[],
       smallBots: [] as SmallBot[],
       elevators: [] as Elevator[],
+      floorTraps: [] as FloorTrap[],
+      machineBoss: makeMachineBoss(),
+      cannonBoss: makeCannonBoss(),
+      spaceshipBoss: makeSpaceshipBoss(),
+      finalRobot: makeFinalRobot(),
       bullets: [] as Bullet[],
       particles: [] as Particle[],
       cameraX: 0,
@@ -213,6 +245,11 @@ export default function RogueBlaster() {
       state.stage3Robots = [];
       state.smallBots = [];
       state.elevators = [];
+      state.floorTraps = [];
+      state.machineBoss = makeMachineBoss();
+      state.cannonBoss = makeCannonBoss();
+      state.spaceshipBoss = makeSpaceshipBoss();
+      state.finalRobot = makeFinalRobot();
       state.bullets = [];
       state.particles = [];
       state.cameraX = 0;
@@ -249,6 +286,11 @@ export default function RogueBlaster() {
       state.stage3Robots = [];
       state.smallBots = [];
       state.elevators = [];
+      state.floorTraps = makeFloorTraps(2);
+      state.machineBoss = makeMachineBoss();
+      state.cannonBoss = makeCannonBoss();
+      state.spaceshipBoss = makeSpaceshipBoss();
+      state.finalRobot = makeFinalRobot();
       state.bullets = [];
       state.particles = [];
       state.cameraX = 0;
@@ -258,8 +300,8 @@ export default function RogueBlaster() {
       state.message = "Stage 2: green robot lab. Infinite bullets — jump-shoot drones!";
     };
 
-    const startStage3 = () => {
-      state.stage = 3;
+    const loadLaterStage = (stage: 3 | 4 | 5) => {
+      state.stage = stage;
       state.player = { ...state.player, x: 90, y: GROUND_Y - PLAYER_H, vy: 0, hp: Math.min(state.player.maxHp, state.player.hp + 55), facing: 1, duck: false, cooldown: 0, invuln: 1.3, reload: 0 };
       state.robots = [];
       state.crawlers = [];
@@ -269,16 +311,26 @@ export default function RogueBlaster() {
       state.missiles = [];
       state.waves = [];
       state.bombs = [];
-      state.stage3Robots = makeStage3Robots();
-      state.smallBots = makeStage3SmallBots();
-      state.elevators = makeStage3Elevators();
+      const extra = stage === 3 ? [] : [520, 1040, 1580, 2140, 2760, 3420, 4040].map((x, i) => ({ x, hp: 4 + (i % 3), maxHp: 4 + (i % 3), active: false, flash: 0, hitTimer: 0, speed: 38 + (i % 2) * 14 }));
+      state.stage3Robots = [...makeStage3Robots(), ...extra];
+      state.smallBots = [...makeStage3SmallBots(), ...(stage === 3 ? [] : [930, 1840, 2690, 3520, 4440].map((x) => ({ x, hp: 7, maxHp: 7, active: false, flash: 0, hitTimer: 0 })) )];
+      state.elevators = stage === 5 ? [] : makeStage3Elevators();
+      state.floorTraps = makeFloorTraps(stage);
+      state.machineBoss = makeMachineBoss();
+      state.cannonBoss = makeCannonBoss();
+      state.spaceshipBoss = makeSpaceshipBoss();
+      state.finalRobot = makeFinalRobot();
       state.bullets = [];
       state.particles = [];
       state.cameraX = 0;
       state.bossStarted = false;
       state.bossPhase = "drop";
-      state.message = "Stage 3: enemy-packed robot elevator shaft. Small robots hit for 50!";
+      state.message = stage === 3 ? "Stage 3: robot elevator shaft. Lava under the lifts — reach the machine boss!" : stage === 4 ? "Stage 4: cannon elevator gauntlet. Watch for laser flashes!" : "Stage 5: warship chase. Survive the pass, then shoot it from behind!";
     };
+
+    const startStage3 = () => loadLaterStage(3);
+    const startStage4 = () => loadLaterStage(4);
+    const startStage5 = () => loadLaterStage(5);
 
     const playerRect = () => {
       const height = state.player.duck ? DUCK_H : PLAYER_H;
@@ -359,6 +411,16 @@ export default function RogueBlaster() {
         state.tankBoss.active = true;
         state.tankBoss.bombTimer = 1.0;
         state.message = "Stage 2 Boss: lab tank! Shoot it and dodge falling bombs.";
+      } else if (state.stage === 3) {
+        state.machineBoss.active = true;
+        state.message = "Stage 3 Boss: jump-shoot the bright weak spot while guns fire everywhere!";
+      } else if (state.stage === 4) {
+        state.cannonBoss.active = true;
+        state.message = "Stage 4 Boss: jump-shoot the cannon core. Flash means BIG LASER!";
+      } else if (state.stage === 5) {
+        state.spaceshipBoss.active = true;
+        state.spaceshipBoss.phase = "pass";
+        state.message = "Stage 5 Boss: dodge the spaceship until it passes, then shoot it from behind!";
       } else {
         state.message = "Boss: shoot down every dropped alien first!";
       }
@@ -520,7 +582,113 @@ export default function RogueBlaster() {
           if (Math.abs(p.x - bomb.x) < 58 && p.y > GROUND_Y - PLAYER_H - 8) hurtPlayer(22);
         }
       }
+      updateFloorTraps(dt);
       state.bombs = state.bombs.filter((bomb) => bomb.life > 0);
+    };
+
+    const updateFloorTraps = (dt: number) => {
+      for (const trap of state.floorTraps) {
+        if (trap.hp <= 0) continue;
+        trap.flash = Math.max(0, trap.flash - dt * 8);
+        if (trap.x - state.player.x < 650) trap.active = true;
+        if (!trap.active) continue;
+        trap.popTimer -= dt;
+        if (!trap.popped && trap.popTimer <= 0) {
+          trap.popped = true;
+          trap.fireTimer = 0.55;
+          state.message = "Floor turret popped up — jump its leg shot or duck-shoot its head!";
+        }
+        if (trap.popped) {
+          trap.fireTimer -= dt;
+          if (trap.fireTimer <= 0) {
+            state.bullets.push({ x: trap.x, y: GROUND_Y - 18, vx: trap.x > state.player.x ? -390 : 390, life: 1.1, damage: 10, enemy: true, low: false, lane: "low" });
+            trap.popped = false;
+            trap.popTimer = 2.1;
+          }
+        }
+      }
+    };
+
+    const updateLaterBosses = (dt: number) => {
+      const p = state.player;
+      if (state.stage === 3 && state.bossStarted && state.machineBoss.hp > 0) {
+        const boss = state.machineBoss;
+        boss.active = true;
+        boss.flash = Math.max(0, boss.flash - dt * 8);
+        boss.x += (BOSS_X + 250 - boss.x) * 0.04;
+        boss.shotTimer -= dt;
+        if (boss.shotTimer <= 0) {
+          const guns = [[-86, -118], [0, -152], [86, -118], [-118, -42], [118, -42]];
+          for (const [ox, oy] of guns) {
+            const sx = boss.x + ox;
+            const sy = GROUND_Y + oy;
+            const dx = p.x - sx;
+            const dy = p.y + 35 - sy;
+            const len = Math.hypot(dx, dy) || 1;
+            state.bullets.push({ x: sx, y: sy, vx: (dx / len) * 360, vy: (dy / len) * 360, life: 1.6, damage: 8, enemy: true, low: false });
+          }
+          boss.shotTimer = 0.85;
+          state.message = "Machine boss: bullets from all guns! Jump-shoot the top weak spot.";
+        }
+      }
+      if (state.stage === 4 && state.bossStarted && state.cannonBoss.hp > 0) {
+        const boss = state.cannonBoss;
+        boss.active = true;
+        boss.flash = Math.max(0, boss.flash - dt * 8);
+        boss.shotTimer -= dt;
+        boss.chargeTimer -= dt;
+        if (boss.shotTimer <= 0) {
+          state.bullets.push({ x: boss.x - 100, y: GROUND_Y - 132, vx: -430, life: 1.4, damage: 8, enemy: true, low: false });
+          boss.shotTimer = 0.72;
+        }
+        if (boss.chargeTimer <= 0 && boss.laserTimer <= 0) {
+          boss.laserTimer = 1.15;
+          boss.chargeTimer = 4.4;
+          state.message = "Cannon flashing — BIG LASER incoming!";
+        }
+        if (boss.laserTimer > 0) {
+          boss.laserTimer -= dt;
+          if (boss.laserTimer < 0.52 && rectsOverlap(playerRect(), { x: boss.x - 760, y: GROUND_Y - 124, w: 760, h: 34 })) hurtPlayer(18);
+        }
+      }
+      if (state.stage === 5 && state.bossStarted) {
+        const ship = state.spaceshipBoss;
+        const bot = state.finalRobot;
+        if (ship.hp > 0) {
+          ship.active = true;
+          ship.flash = Math.max(0, ship.flash - dt * 8);
+          ship.shotTimer -= dt;
+          ship.x += ship.phase === "pass" ? -190 * dt : 95 * dt;
+          if (ship.x < p.x - 220) {
+            ship.phase = "retreat";
+            state.message = "Spaceship passed — now jump and shoot it from behind!";
+          }
+          if (ship.shotTimer <= 0) {
+            for (const oy of [-45, 0, 45]) state.bullets.push({ x: ship.x - 135, y: ship.y + oy, vx: -390, life: 1.6, damage: 8, enemy: true, low: false });
+            ship.shotTimer = 0.55;
+          }
+        } else if (bot.hp > 0) {
+          bot.active = true;
+          bot.flash = Math.max(0, bot.flash - dt * 8);
+          bot.hitTimer = Math.max(0, bot.hitTimer - dt);
+          bot.duckTimer -= dt;
+          const leftEdge = state.cameraX + 90;
+          const rightEdge = state.cameraX + window.innerWidth - 90;
+          if (bot.duckTimer <= 0 && (bot.x < leftEdge + 45 || bot.x > rightEdge - 45)) {
+            bot.duckTimer = 1.0;
+            bot.dir = bot.x < p.x ? 1 : -1;
+            state.message = "Final robot ducks and punches — jump over it!";
+          }
+          if (bot.duckTimer <= 0) bot.x += Math.sign(p.x - bot.x) * 150 * dt;
+          if (rectsOverlap(playerRect(), { x: bot.x - 42, y: GROUND_Y - (bot.duckTimer > 0 ? 62 : 138), w: 84, h: bot.duckTimer > 0 ? 62 : 138 }) && bot.hitTimer <= 0) {
+            hurtPlayer(bot.duckTimer > 0 ? 22 : 12);
+            bot.hitTimer = 0.6;
+          }
+        } else {
+          state.won = true;
+          state.message = "Stage 5 clear — mission complete!";
+        }
+      }
     };
 
     const updateStage3 = (dt: number) => {
@@ -542,9 +710,14 @@ export default function RogueBlaster() {
           p.y = elevator.y - 12 - PLAYER_H;
           p.vy = 0;
           p.y += elevator.y - lastY;
-          state.message = "Elevator platform: ride it down and up through the robot shaft.";
+          state.message = "Elevator platform: ride it over the lava.";
+        } else if (p.y >= GROUND_Y - PLAYER_H - 2 && Math.abs(p.x - elevator.x) < elevator.w / 2 + 38) {
+          hurtPlayer(18);
+          state.message = "Lava under the elevator — hop onto the platform!";
         }
       }
+
+      updateFloorTraps(dt);
 
       for (const robot of state.stage3Robots) {
         if (robot.hp <= 0) continue;
@@ -573,10 +746,16 @@ export default function RogueBlaster() {
         }
       }
 
-      if (p.x > FINISH_X - 160) {
-        state.won = true;
+      updateLaterBosses(dt);
+      if (!state.bossStarted && p.x > BOSS_X - 170) startBoss();
+      if (state.stage === 3 && state.bossStarted && state.machineBoss.hp <= 0) {
         state.score += 12000;
-        state.message = "Stage 3 clear — elevator robot sector survived!";
+        state.message = "Machine boss destroyed — Stage 4 begins!";
+        startStage4();
+      } else if (state.stage === 4 && state.bossStarted && state.cannonBoss.hp <= 0) {
+        state.score += 14000;
+        state.message = "Cannon boss destroyed — Stage 5 begins!";
+        startStage5();
       }
     };
 
@@ -723,7 +902,7 @@ export default function RogueBlaster() {
             }
           }
         }
-        if (state.stage === 3) {
+        if (state.stage >= 3) {
           for (const robot of state.stage3Robots) {
             if (robot.hp <= 0 || bullet.life <= 0) continue;
             if (rectsOverlap({ x: bullet.x - 7, y: bullet.y - 4, w: 14, h: 8 }, { x: robot.x - 22, y: GROUND_Y - 74, w: 44, h: 74 })) {
@@ -749,6 +928,47 @@ export default function RogueBlaster() {
                 burst(state.particles, bot.x, GROUND_Y - 14, "#fca5a5", 22);
               }
             }
+          }
+        }
+        if (state.stage >= 2) {
+          for (const trap of state.floorTraps) {
+            if (trap.hp <= 0 || bullet.life <= 0 || !trap.popped || !bullet.low) continue;
+            if (rectsOverlap({ x: bullet.x - 7, y: bullet.y - 4, w: 14, h: 8 }, { x: trap.x - 25, y: GROUND_Y - 48, w: 50, h: 42 })) {
+              trap.hp -= 1;
+              trap.flash = 1;
+              bullet.life = 0;
+              if (trap.hp <= 0) {
+                state.score += 450;
+                burst(state.particles, trap.x, GROUND_Y - 28, "#93c5fd", 18);
+              }
+            }
+          }
+        }
+        if (state.stage === 3 && state.bossStarted && state.machineBoss.hp > 0 && bullet.life > 0 && rectsOverlap({ x: bullet.x - 7, y: bullet.y - 4, w: 14, h: 8 }, { x: state.machineBoss.x - 34, y: GROUND_Y - 220, w: 68, h: 54 })) {
+          state.machineBoss.hp -= 1;
+          state.machineBoss.flash = 1;
+          bullet.life = 0;
+        }
+        if (state.stage === 4 && state.bossStarted && state.cannonBoss.hp > 0 && bullet.life > 0 && rectsOverlap({ x: bullet.x - 7, y: bullet.y - 4, w: 14, h: 8 }, { x: state.cannonBoss.x - 36, y: GROUND_Y - 174, w: 72, h: 58 })) {
+          state.cannonBoss.hp -= 1;
+          state.cannonBoss.flash = 1;
+          bullet.life = 0;
+        }
+        if (state.stage === 5 && state.bossStarted && bullet.life > 0) {
+          if (state.spaceshipBoss.hp > 0 && state.spaceshipBoss.phase === "retreat" && rectsOverlap({ x: bullet.x - 7, y: bullet.y - 4, w: 14, h: 8 }, { x: state.spaceshipBoss.x - 145, y: state.spaceshipBoss.y - 58, w: 290, h: 116 })) {
+            state.spaceshipBoss.hp -= 1;
+            state.spaceshipBoss.flash = 1;
+            bullet.life = 0;
+            if (state.spaceshipBoss.hp <= 0) {
+              state.finalRobot.active = true;
+              state.message = "Spaceship destroyed — final robot is chasing you!";
+              burst(state.particles, state.spaceshipBoss.x, state.spaceshipBoss.y, "#fde047", 70);
+            }
+          } else if (state.spaceshipBoss.hp <= 0 && state.finalRobot.hp > 0 && rectsOverlap({ x: bullet.x - 7, y: bullet.y - 4, w: 14, h: 8 }, { x: state.finalRobot.x - 48, y: GROUND_Y - (state.finalRobot.duckTimer > 0 ? 68 : 146), w: 96, h: state.finalRobot.duckTimer > 0 ? 68 : 146 })) {
+            state.finalRobot.hp -= 1;
+            state.finalRobot.flash = 1;
+            bullet.life = 0;
+            if (state.finalRobot.hp <= 0) burst(state.particles, state.finalRobot.x, GROUND_Y - 80, "#fde047", 90);
           }
         }
         if (state.stage === 2) {
@@ -1091,6 +1311,8 @@ export default function RogueBlaster() {
 
     const drawStage3Enemy = () => {
       for (const elevator of state.elevators) {
+        ctx.fillStyle = "rgba(239,68,68,0.75)";
+        ctx.fillRect(elevator.x - elevator.w / 2 - 36, GROUND_Y - 8, elevator.w + 72, 16);
         ctx.fillStyle = "#475569";
         ctx.fillRect(elevator.x - elevator.w / 2, elevator.y - 12, elevator.w, 16);
         ctx.fillStyle = "#93c5fd";
@@ -1127,6 +1349,80 @@ export default function RogueBlaster() {
         ctx.fillRect(bot.x - 12, GROUND_Y - 17, 24, 7);
         ctx.fillStyle = "#fecaca";
         ctx.fillRect(bot.x - 5, GROUND_Y - 15, 10, 3);
+      }
+    };
+
+    const drawFloorTrapsAndLaterBosses = () => {
+      for (const trap of state.floorTraps) {
+        if (trap.hp <= 0) continue;
+        ctx.fillStyle = trap.flash > 0 ? "white" : "#e5e7eb";
+        ctx.fillRect(trap.x - 34, GROUND_Y - 9, 68, 5);
+        if (trap.popped) {
+          ctx.fillStyle = "#cbd5e1";
+          ctx.fillRect(trap.x - 28, GROUND_Y - 46, 56, 39);
+          ctx.fillStyle = "#0f172a";
+          ctx.fillRect(trap.x - 10, GROUND_Y - 34, 20, 15);
+          ctx.fillStyle = "#38bdf8";
+          ctx.fillRect(trap.x - 43, GROUND_Y - 30, 36, 8);
+          ctx.fillStyle = "#f8fafc";
+          ctx.beginPath();
+          ctx.moveTo(trap.x + 4, GROUND_Y - 48);
+          ctx.lineTo(trap.x + 53, GROUND_Y - 76);
+          ctx.lineTo(trap.x + 34, GROUND_Y - 39);
+          ctx.closePath();
+          ctx.fill();
+        }
+      }
+      if (state.stage === 3 && state.bossStarted && state.machineBoss.hp > 0) {
+        const b = state.machineBoss;
+        ctx.save();
+        ctx.translate(b.x, GROUND_Y);
+        ctx.fillStyle = b.flash > 0 ? "white" : "#475569";
+        ctx.fillRect(-125, -165, 250, 135);
+        ctx.fillStyle = "#111827";
+        ctx.fillRect(-44, -225, 88, 62);
+        ctx.fillStyle = "#facc15";
+        ctx.fillRect(-28, -204, 56, 18);
+        ctx.fillStyle = "#ef4444";
+        for (const [ox, oy] of [[-86, -118], [0, -152], [86, -118], [-118, -42], [118, -42]]) ctx.fillRect(ox - 14, oy - 10, 28, 20);
+        ctx.restore();
+        ctx.fillStyle = "#111827"; ctx.fillRect(b.x - 110, GROUND_Y - 245, 220, 9);
+        ctx.fillStyle = "#facc15"; ctx.fillRect(b.x - 110, GROUND_Y - 245, 220 * Math.max(0, b.hp / b.maxHp), 9);
+      }
+      if (state.stage === 4 && state.bossStarted && state.cannonBoss.hp > 0) {
+        const b = state.cannonBoss;
+        ctx.save(); ctx.translate(b.x, GROUND_Y);
+        ctx.fillStyle = b.flash > 0 || b.laserTimer > 0.52 ? "#fde047" : "#64748b";
+        ctx.fillRect(-78, -160, 156, 130);
+        ctx.fillStyle = "#111827"; ctx.fillRect(-135, -125, 110, 40);
+        ctx.fillStyle = "#38bdf8"; ctx.fillRect(-28, -174, 56, 54);
+        if (b.laserTimer > 0) { ctx.fillStyle = "rgba(239,68,68,0.45)"; ctx.fillRect(-820, -124, 740, 34); }
+        ctx.restore();
+        ctx.fillStyle = "#111827"; ctx.fillRect(b.x - 100, GROUND_Y - 205, 200, 9);
+        ctx.fillStyle = "#38bdf8"; ctx.fillRect(b.x - 100, GROUND_Y - 205, 200 * Math.max(0, b.hp / b.maxHp), 9);
+      }
+      if (state.stage === 5 && state.bossStarted) {
+        const s = state.spaceshipBoss;
+        if (s.hp > 0) {
+          ctx.save(); ctx.translate(s.x, s.y);
+          ctx.fillStyle = s.flash > 0 ? "white" : "#94a3b8";
+          ctx.beginPath(); ctx.ellipse(0, 0, 155, 58, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = "#334155"; ctx.fillRect(-120, -18, 240, 36);
+          ctx.fillStyle = "#ef4444"; for (let x = -90; x <= 90; x += 45) ctx.fillRect(x - 8, 42, 16, 24);
+          ctx.restore();
+          ctx.fillStyle = "#111827"; ctx.fillRect(s.x - 110, s.y - 88, 220, 8);
+          ctx.fillStyle = "#fde047"; ctx.fillRect(s.x - 110, s.y - 88, 220 * Math.max(0, s.hp / s.maxHp), 8);
+        } else if (state.finalRobot.hp > 0) {
+          const r = state.finalRobot; const crouch = r.duckTimer > 0;
+          ctx.save(); ctx.translate(r.x, GROUND_Y);
+          ctx.fillStyle = r.flash > 0 ? "white" : "#dc2626"; ctx.fillRect(-42, crouch ? -58 : -130, 84, crouch ? 58 : 120);
+          ctx.fillStyle = "#7f1d1d"; ctx.fillRect(-34, crouch ? -86 : -166, 68, 42);
+          ctx.fillStyle = "#fecaca"; ctx.fillRect(-22, crouch ? -72 : -151, 44, 9);
+          ctx.fillStyle = "#991b1b"; ctx.fillRect(r.dir > 0 ? 32 : -92, crouch ? -42 : -95, 60, 22);
+          ctx.restore();
+          ctx.fillStyle = "#111827"; ctx.fillRect(r.x - 70, GROUND_Y - 190, 140, 8);
+          ctx.fillStyle = "#f87171"; ctx.fillRect(r.x - 70, GROUND_Y - 190, 140 * Math.max(0, r.hp / r.maxHp), 8);
+        }
       }
     };
 
@@ -1190,27 +1486,28 @@ export default function RogueBlaster() {
         ctx.fill();
       }
       if (!state.bossStarted) {
-        ctx.fillStyle = state.stage === 2 ? "rgba(190,242,100,0.35)" : "rgba(239,68,68,0.45)";
+        ctx.fillStyle = state.stage >= 2 ? "rgba(190,242,100,0.35)" : "rgba(239,68,68,0.45)";
         ctx.fillRect(BOSS_X - 30, 120, 22, GROUND_Y - 120);
-        ctx.fillStyle = state.stage === 2 ? "#bbf7d0" : "#fecaca";
+        ctx.fillStyle = state.stage >= 2 ? "#bbf7d0" : "#fecaca";
         ctx.font = "900 18px Inter, sans-serif";
         ctx.textAlign = "center";
-        ctx.fillText(state.stage === 2 ? "LAB TANK BOSS" : "BOSS WARNING", BOSS_X + 95, 105);
+        ctx.fillText(state.stage === 2 ? "LAB TANK BOSS" : state.stage === 3 ? "MACHINE BOSS" : state.stage === 4 ? "CANNON BOSS" : state.stage === 5 ? "WARSHIP BOSS" : "BOSS WARNING", BOSS_X + 95, 105);
       } else {
-        ctx.fillStyle = state.stage === 2 ? "rgba(190,242,100,0.22)" : "rgba(34,211,238,0.22)";
+        ctx.fillStyle = state.stage >= 2 ? "rgba(190,242,100,0.22)" : "rgba(34,211,238,0.22)";
         ctx.fillRect(BOSS_X - 30, 120, 22, GROUND_Y - 120);
         ctx.fillRect(FINISH_X - 40, 120, 22, GROUND_Y - 120);
         ctx.fillStyle = "#e2e8f0";
         ctx.font = "900 20px Inter, sans-serif";
         ctx.textAlign = "center";
-        ctx.fillText(state.stage === 2 ? "TANK BOSS ACTIVE" : "HELICOPTER BOSS ACTIVE", BOSS_X + 240, 105);
+        ctx.fillText(state.stage === 2 ? "TANK BOSS ACTIVE" : state.stage === 3 ? "MACHINE BOSS ACTIVE" : state.stage === 4 ? "CANNON BOSS ACTIVE" : state.stage === 5 ? "WARSHIP BOSS ACTIVE" : "HELICOPTER BOSS ACTIVE", BOSS_X + 240, 105);
       }
 
       for (const crawler of state.crawlers) drawCrawler(crawler);
       for (const robot of state.robots) drawRobot(robot);
       for (const alien of state.aliens) drawAlien(alien);
       if (state.stage === 2) drawStage2Enemy();
-      if (state.stage === 3) drawStage3Enemy();
+      if (state.stage >= 3) drawStage3Enemy();
+      if (state.stage >= 2) drawFloorTrapsAndLaterBosses();
       drawBoss();
       for (const bullet of state.bullets) {
         if (bullet.enemy && bullet.lane) {
@@ -1245,14 +1542,14 @@ export default function RogueBlaster() {
         ctx.fillText(state.won ? "Lab Tank Down!" : state.gameOver ? "Mission Failed" : "Rough Run: Robot Silius", w / 2, h / 2 - 72);
         ctx.fillStyle = "#fde68a";
         ctx.font = "900 19px Inter, sans-serif";
-        ctx.fillText(state.won || state.gameOver ? `Score ${state.score.toLocaleString()} • Robots ${state.kills}` : "Clear Stage 1 to unlock Stage 2: the green robot lab", w / 2, h / 2 - 24);
+        ctx.fillText(state.won || state.gameOver ? `Score ${state.score.toLocaleString()} • Robots ${state.kills}` : "Clear five stages: helicopter, lab tank, machine, cannon, then spaceship and final robot", w / 2, h / 2 - 24);
         ctx.fillStyle = "#cbd5e1";
         ctx.font = "800 16px Inter, sans-serif";
         ctx.fillText("A/D move • W/↑ jump • S/↓ duck • Space/F shoot • Infinite bullets", w / 2, h / 2 + 24);
       }
 
       if (hudRef.current) {
-        hudRef.current.innerHTML = `<div><span>Stage</span><strong>${state.stage}/3</strong></div><div><span>Suit</span><strong>${Math.round(state.player.hp)}/${state.player.maxHp}</strong></div><div><span>Cells</span><strong>∞</strong></div><div><span>Robots</span><strong>${state.kills}</strong></div><div><span>Boss</span><strong>${state.bossStarted ? (state.stage === 2 ? "tank" : state.bossPhase) : "Ahead"}</strong></div><div><span>Tip</span><strong>${state.message}</strong></div>`;
+        hudRef.current.innerHTML = `<div><span>Stage</span><strong>${state.stage}/${STAGE_MAX}</strong></div><div><span>Suit</span><strong>${Math.round(state.player.hp)}/${state.player.maxHp}</strong></div><div><span>Cells</span><strong>∞</strong></div><div><span>Robots</span><strong>${state.kills}</strong></div><div><span>Boss</span><strong>${state.bossStarted ? (state.stage === 2 ? "tank" : state.stage === 3 ? "machine" : state.stage === 4 ? "cannon" : state.stage === 5 ? "warship" : state.bossPhase) : "Ahead"}</strong></div><div><span>Tip</span><strong>${state.message}</strong></div>`;
       }
     };
 
@@ -1282,7 +1579,7 @@ export default function RogueBlaster() {
         <div className="rounded-3xl border border-white/10 bg-black/50 px-5 py-4 shadow-2xl backdrop-blur-md">
           <p className="text-xs font-black uppercase tracking-[0.28em] text-cyan-200">Rough Run</p>
           <h1 className="text-2xl font-black">Robot Silius Mission</h1>
-          <p className="mt-1 text-sm font-bold text-slate-300">Clear Stage 1 to enter Stage 2: a green lab with drones, missile bots, a giant robot, and a tank boss. Infinite bullets.</p>
+          <p className="mt-1 text-sm font-bold text-slate-300">Five-stage run: drones, elevators over lava, pop-up floor guns, machine/cannon bosses, spaceship chase, and final robot duel.</p>
         </div>
         <Link className="pointer-events-auto rounded-full bg-white px-5 py-3 text-xs font-black uppercase tracking-[0.2em] text-slate-950 shadow-xl transition hover:-translate-y-1 hover:bg-cyan-100" to="/">
           Back to Lobby
