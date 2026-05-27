@@ -681,10 +681,15 @@ export default function RogueBlaster() {
           ship.active = true;
           ship.flash = Math.max(0, ship.flash - dt * 8);
           ship.shotTimer -= dt;
-          ship.x += ship.phase === "pass" ? -190 * dt : 95 * dt;
-          if (ship.x < p.x - 220) {
+          const leftTurn = Math.max(BOSS_X - 260, state.cameraX + 150);
+          const rightTurn = Math.min(FINISH_X + 280, state.cameraX + window.innerWidth + 210);
+          ship.x += ship.phase === "pass" ? -190 * dt : 135 * dt;
+          if (ship.phase === "pass" && ship.x < leftTurn) {
             ship.phase = "retreat";
-            state.message = "Spaceship passed — now jump and shoot it from behind!";
+            state.message = "Spaceship passed — jump and shoot it from behind while it retreats!";
+          } else if (ship.phase === "retreat" && ship.x > rightTurn) {
+            ship.phase = "pass";
+            state.message = "Spaceship is coming back for another pass — dodge until it turns again!";
           }
           if (ship.shotTimer <= 0) {
             for (const oy of [-45, 0, 45]) state.bullets.push({ x: ship.x - 135, y: ship.y + oy, vx: -390, life: 1.6, damage: 8, enemy: true, low: false });
