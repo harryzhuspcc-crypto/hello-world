@@ -53,6 +53,8 @@ const BOSS_LANES: BossLane[] = ["high", "mid", "low"];
 const STAGE2_GIANT_X = 2550;
 const STAGE3_SMALLBOT_DAMAGE = 50;
 const STAGE_MAX = 5;
+const FINAL_ARENA_LEFT = 80;
+const FINAL_ARENA_RIGHT = 940;
 const MACHINE_SAFE_X = BOSS_X - 370;
 const MACHINE_SAFE_W = 175;
 
@@ -206,6 +208,7 @@ export default function RogueBlaster() {
       gameOver: false,
       won: false,
       lives: 3,
+      finalArena: false,
       score: 0,
       kills: 0,
       bossStarted: false,
@@ -260,6 +263,7 @@ export default function RogueBlaster() {
       state.gameOver = false;
       state.won = false;
       state.lives = 3;
+      state.finalArena = false;
       state.score = 0;
       state.kills = 0;
       state.bossStarted = false;
@@ -299,6 +303,7 @@ export default function RogueBlaster() {
       state.particles = [];
       state.cameraX = 0;
       state.bossStarted = false;
+      state.finalArena = false;
       state.bossPhase = "drop";
       state.bossShotTimer = 1.2;
       state.message = "Stage 2: green robot lab. Infinite bullets — jump-shoot drones!";
@@ -328,6 +333,7 @@ export default function RogueBlaster() {
       state.particles = [];
       state.cameraX = 0;
       state.bossStarted = false;
+      state.finalArena = false;
       state.bossPhase = "drop";
       state.message = stage === 3 ? "Stage 3: robot elevator shaft. Lava under the lifts — reach the machine boss!" : stage === 4 ? "Stage 4: cannon elevator gauntlet. Watch for laser flashes!" : "Stage 5: warship chase. Survive the pass, then shoot it from behind!";
     };
@@ -335,6 +341,19 @@ export default function RogueBlaster() {
     const startStage3 = () => loadLaterStage(3);
     const startStage4 = () => loadLaterStage(4);
     const startStage5 = () => loadLaterStage(5);
+
+    const startFinalArena = () => {
+      state.finalArena = true;
+      state.player = { ...state.player, x: FINAL_ARENA_LEFT + 50, y: GROUND_Y - PLAYER_H, vy: 0, facing: 1, duck: false, invuln: 1.4 };
+      state.finalRobot = { ...state.finalRobot, x: FINAL_ARENA_RIGHT - 75, active: true, dir: -1, duckTimer: 0, hitTimer: 0 };
+      state.stage3Robots = [];
+      state.smallBots = [];
+      state.floorTraps = [];
+      state.bullets = [];
+      state.particles = [];
+      state.cameraX = 0;
+      state.message = "Final duel arena: nothing else here. Let the robot chase to an edge, then jump over its duck punch!";
+    };
 
     const playerRect = () => {
       const height = state.player.duck ? DUCK_H : PLAYER_H;
@@ -696,18 +715,24 @@ export default function RogueBlaster() {
             ship.shotTimer = 0.55;
           }
         } else if (bot.hp > 0) {
+          if (!state.finalArena) startFinalArena();
           bot.active = true;
           bot.flash = Math.max(0, bot.flash - dt * 8);
           bot.hitTimer = Math.max(0, bot.hitTimer - dt);
           bot.duckTimer -= dt;
-          const leftEdge = state.cameraX + 90;
-          const rightEdge = state.cameraX + window.innerWidth - 90;
-          if (bot.duckTimer <= 0 && (bot.x < leftEdge + 45 || bot.x > rightEdge - 45)) {
-            bot.duckTimer = 1.0;
-            bot.dir = bot.x < p.x ? 1 : -1;
-            state.message = "Final robot ducks and punches — jump over it!";
+          const leftEdge = state.finalArena ? FINAL_ARENA_LEFT + 25 : state.cameraX + 90;
+          const rightEdge = state.finalArena ? FINAL_ARENA_RIGHT - 25 : state.cameraX + window.innerWidth - 90;
+          if (bot.duckTimer <= 0 && (bot.x < leftEdge + 18 || bot.x > rightEdge - 18)) {
+            bot.x = clamp(bot.x, leftEdge, rightEdge);
+            bot.duckTimer = 1.05;
+            bot.dir = bot.x < (FINAL_ARENA_LEFT + FINAL_ARENA_RIGHT) / 2 ? 1 : -1;
+            state.message = "Robot duck-punches at the edge — jump over it while it is low!";
           }
-          if (bot.duckTimer <= 0) bot.x += Math.sign(p.x - bot.x) * 150 * dt;
+          if (bot.duckTimer <= 0) {
+            bot.x += bot.dir * 185 * dt;
+            if (Math.abs(p.x - bot.x) < 95) bot.x += Math.sign(p.x - bot.x || bot.dir) * 40 * dt;
+          }
+          bot.x = clamp(bot.x, leftEdge, rightEdge);
           if (rectsOverlap(playerRect(), { x: bot.x - 42, y: GROUND_Y - (bot.duckTimer > 0 ? 62 : 138), w: 84, h: bot.duckTimer > 0 ? 62 : 138 }) && bot.hitTimer <= 0) {
             hurtPlayer(bot.duckTimer > 0 ? 22 : 12);
             bot.hitTimer = 0.6;
@@ -813,7 +838,7 @@ export default function RogueBlaster() {
         p.y = GROUND_Y - PLAYER_H;
         p.vy = 0;
       }
-      p.x = clamp(p.x, 70, FINISH_X);
+      p.x = state.finalArena ? clamp(p.x, FINAL_ARENA_LEFT + 20, FINAL_ARENA_RIGHT - 20) : clamp(p.x, 70, FINISH_X);
       if (state.stage === 2 && state.giantBot.hp > 0 && p.x > STAGE2_GIANT_X + 130) {
         p.x = STAGE2_GIANT_X + 130;
         state.message = "The massive human robot blocks the lab — destroy it first!";
@@ -997,8 +1022,9 @@ export default function RogueBlaster() {
             bullet.life = 0;
             if (state.spaceshipBoss.hp <= 0) {
               state.finalRobot.active = true;
-              state.message = "Spaceship destroyed — final robot is chasing you!";
+              state.message = "Spaceship destroyed — teleporting to final duel arena!";
               burst(state.particles, state.spaceshipBoss.x, state.spaceshipBoss.y, "#fde047", 70);
+              startFinalArena();
             }
           } else if (state.spaceshipBoss.hp <= 0 && state.finalRobot.hp > 0 && rectsOverlap({ x: bullet.x - 7, y: bullet.y - 4, w: 14, h: 8 }, { x: state.finalRobot.x - 48, y: GROUND_Y - (state.finalRobot.duckTimer > 0 ? 68 : 146), w: 96, h: state.finalRobot.duckTimer > 0 ? 68 : 146 })) {
             state.finalRobot.hp -= 1;
@@ -1099,8 +1125,12 @@ export default function RogueBlaster() {
         particle.life -= dt;
       }
       state.particles = state.particles.filter((particle) => particle.life > 0);
-      state.cameraX += (p.x - 250 - state.cameraX) * 0.14;
-      state.cameraX = clamp(state.cameraX, 0, FINISH_X - window.innerWidth + 260);
+      if (state.finalArena) {
+        state.cameraX = 0;
+      } else {
+        state.cameraX += (p.x - 250 - state.cameraX) * 0.14;
+        state.cameraX = clamp(state.cameraX, 0, FINISH_X - window.innerWidth + 260);
+      }
     };
 
     const drawPlayer = () => {
@@ -1492,10 +1522,30 @@ export default function RogueBlaster() {
       ctx.fillRect(0, 0, w, h);
       ctx.fillStyle = "rgba(255,255,255,0.72)";
       for (let i = 0; i < 85; i += 1) ctx.fillRect((i * 137 - state.cameraX * 0.08) % (w + 80), (i * 71) % 260 + 16, 1 + (i % 3), 1 + (i % 3));
+      if (state.finalArena) {
+        ctx.fillStyle = "rgba(34,211,238,0.55)";
+        for (let i = 0; i < 6; i += 1) {
+          ctx.beginPath();
+          ctx.ellipse(220 + i * 170, 120 + (i % 3) * 80, 18 + i * 4, 10 + i * 2, 0.4, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.fillStyle = "rgba(234,179,8,0.82)";
+        ctx.beginPath();
+        ctx.ellipse(870, GROUND_Y - 35, 160, 82, -0.25, Math.PI, Math.PI * 2);
+        ctx.fill();
+      }
 
       ctx.save();
       ctx.translate(-state.cameraX, 0);
-      for (let x = -200; x < FINISH_X + 700; x += 340) {
+      if (state.finalArena) {
+        ctx.fillStyle = "#052e16";
+        ctx.fillRect(FINAL_ARENA_LEFT - 80, GROUND_Y, FINAL_ARENA_RIGHT - FINAL_ARENA_LEFT + 160, 140);
+        ctx.fillStyle = "#16a34a";
+        for (let x = FINAL_ARENA_LEFT - 60; x < FINAL_ARENA_RIGHT + 80; x += 90) ctx.fillRect(x, GROUND_Y + 16, 70, 9);
+        ctx.fillStyle = "rgba(34,197,94,0.85)";
+        ctx.fillRect(FINAL_ARENA_LEFT - 4, GROUND_Y - 6, 8, 110);
+        ctx.fillRect(FINAL_ARENA_RIGHT - 4, GROUND_Y - 6, 8, 110);
+      } else for (let x = -200; x < FINISH_X + 700; x += 340) {
         if (state.stage === 3) {
           ctx.fillStyle = x % 680 === 0 ? "#0f172a" : "#1e293b";
           ctx.fillRect(x, 130, 170, GROUND_Y - 130);
@@ -1520,10 +1570,12 @@ export default function RogueBlaster() {
           ctx.fillRect(x + 204, GROUND_Y - 132, 20, 132);
         }
       }
-      ctx.fillStyle = state.stage === 3 ? "#0f172a" : state.stage === 2 ? "#052e16" : "#3b0764";
-      ctx.fillRect(-200, GROUND_Y, FINISH_X + 900, 170);
-      ctx.fillStyle = state.stage === 3 ? "rgba(147,197,253,0.35)" : state.stage === 2 ? "rgba(190,242,100,0.35)" : "rgba(103,232,249,0.35)";
-      for (let x = 0; x < FINISH_X + 500; x += 150) ctx.fillRect(x, GROUND_Y + 58, 70, 8);
+      if (!state.finalArena) {
+        ctx.fillStyle = state.stage === 3 ? "#0f172a" : state.stage === 2 ? "#052e16" : "#3b0764";
+        ctx.fillRect(-200, GROUND_Y, FINISH_X + 900, 170);
+        ctx.fillStyle = state.stage === 3 ? "rgba(147,197,253,0.35)" : state.stage === 2 ? "rgba(190,242,100,0.35)" : "rgba(103,232,249,0.35)";
+        for (let x = 0; x < FINISH_X + 500; x += 150) ctx.fillRect(x, GROUND_Y + 58, 70, 8);
+      }
       ctx.fillStyle = "rgba(15,23,42,0.45)";
       for (let x = 40; x < FINISH_X + 500; x += 330) {
         ctx.beginPath();
