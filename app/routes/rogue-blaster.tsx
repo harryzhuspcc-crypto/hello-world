@@ -55,6 +55,7 @@ const STAGE3_SMALLBOT_DAMAGE = 50;
 const STAGE_MAX = 5;
 const FINAL_ARENA_LEFT = 80;
 const FINAL_ARENA_RIGHT = 940;
+const FINAL_ROBOT_EDGE_PAD = 135;
 const MACHINE_SAFE_X = BOSS_X - 370;
 const MACHINE_SAFE_W = 175;
 
@@ -345,7 +346,7 @@ export default function RogueBlaster() {
     const startFinalArena = () => {
       state.finalArena = true;
       state.player = { ...state.player, x: FINAL_ARENA_LEFT + 50, y: GROUND_Y - PLAYER_H, vy: 0, facing: 1, duck: false, invuln: 1.4 };
-      state.finalRobot = { ...state.finalRobot, x: FINAL_ARENA_RIGHT - 75, active: true, dir: -1, duckTimer: 0, hitTimer: 0 };
+      state.finalRobot = { ...state.finalRobot, x: FINAL_ARENA_RIGHT - FINAL_ROBOT_EDGE_PAD, active: true, dir: -1, duckTimer: 0, hitTimer: 0 };
       state.stage3Robots = [];
       state.smallBots = [];
       state.floorTraps = [];
@@ -720,8 +721,8 @@ export default function RogueBlaster() {
           bot.flash = Math.max(0, bot.flash - dt * 8);
           bot.hitTimer = Math.max(0, bot.hitTimer - dt);
           bot.duckTimer -= dt;
-          const leftEdge = state.finalArena ? FINAL_ARENA_LEFT + 25 : state.cameraX + 90;
-          const rightEdge = state.finalArena ? FINAL_ARENA_RIGHT - 25 : state.cameraX + window.innerWidth - 90;
+          const leftEdge = state.finalArena ? FINAL_ARENA_LEFT + FINAL_ROBOT_EDGE_PAD : state.cameraX + 90;
+          const rightEdge = state.finalArena ? FINAL_ARENA_RIGHT - FINAL_ROBOT_EDGE_PAD : state.cameraX + window.innerWidth - 90;
           if (bot.duckTimer <= 0 && (bot.x < leftEdge + 18 || bot.x > rightEdge - 18)) {
             bot.x = clamp(bot.x, leftEdge, rightEdge);
             bot.duckTimer = 1.05;
