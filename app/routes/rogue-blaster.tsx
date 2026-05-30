@@ -725,7 +725,7 @@ export default function RogueBlaster() {
           const rightEdge = state.finalArena ? FINAL_ARENA_RIGHT - FINAL_ROBOT_EDGE_PAD : state.cameraX + window.innerWidth - 90;
           if (bot.duckTimer <= 0 && (bot.x < leftEdge + 18 || bot.x > rightEdge - 18)) {
             bot.x = clamp(bot.x, leftEdge, rightEdge);
-            bot.duckTimer = 1.05;
+            bot.duckTimer = 0.55;
             bot.dir = bot.x < (FINAL_ARENA_LEFT + FINAL_ARENA_RIGHT) / 2 ? 1 : -1;
             state.message = "Robot duck-punches at the edge — jump over it while it is low!";
           }
