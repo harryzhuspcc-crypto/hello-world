@@ -110,6 +110,23 @@ function weaponName(weapon: WeaponKey) {
   return "Handgun";
 }
 
+function weaponCost(weapon: WeaponKey) {
+  if (weapon === "machine") return 1;
+  if (weapon === "laser") return 2;
+  if (weapon === "plasma") return 3;
+  if (weapon === "missile") return 5;
+  return 0;
+}
+
+function unlockedWeapons(stage: number): WeaponKey[] {
+  const weapons: WeaponKey[] = ["handgun"];
+  if (stage >= 2) weapons.push("machine");
+  if (stage >= 3) weapons.push("laser");
+  if (stage >= 4) weapons.push("plasma");
+  if (stage >= 5) weapons.push("missile");
+  return weapons;
+}
+
 function makeRobots(): Robot[] {
   return [
     { x: 520, y: GROUND_Y, hp: 5, maxHp: 5, speed: 48, active: false, flash: 0, shootTimer: 1.6, type: "walker" },
@@ -242,6 +259,9 @@ export default function RogueBlaster() {
       lives: 3,
       finalArena: false,
       stageClear: null as null | { from: number; to: number; weapon: string },
+      gunSelect: false,
+      selectedWeapon: "handgun" as WeaponKey,
+      specialAmmo: 0,
       score: 0,
       kills: 0,
       bossStarted: false,
@@ -341,6 +361,7 @@ export default function RogueBlaster() {
     };
 
     const beginStageClear = (toStage: number, startNextStage: () => void) => {
+      state.specialAmmo = clamp(state.specialAmmo + 20, 0, 99);
       state.stageClear = { from: state.stage, to: toStage, weapon: weaponName(weaponForStage(toStage)) };
       state.bullets = [];
       state.message = `Stage ${state.stage} clear — ${weaponName(weaponForStage(toStage))} unlocked!`;
@@ -408,6 +429,9 @@ export default function RogueBlaster() {
       state.lives = 3;
       state.finalArena = false;
       state.stageClear = null;
+      state.gunSelect = false;
+      state.selectedWeapon = "handgun";
+      state.specialAmmo = 0;
       state.score = 0;
       state.kills = 0;
       state.bossStarted = false;
@@ -450,9 +474,11 @@ export default function RogueBlaster() {
       state.bossStarted = false;
       state.finalArena = false;
       state.stageClear = null;
+      state.gunSelect = false;
+      state.selectedWeapon = "machine";
       state.bossPhase = "drop";
       state.bossShotTimer = 1.2;
-      state.message = "Stage 2: green robot lab. Infinite bullets — jump-shoot drones!";
+      state.message = "Stage 2: green robot lab. Machine Gun unlocked — collect bullets to power special guns!";
     };
 
     const loadLaterStage = (stage: 3 | 4 | 5) => {
@@ -481,8 +507,10 @@ export default function RogueBlaster() {
       state.bossStarted = false;
       state.finalArena = false;
       state.stageClear = null;
+      state.gunSelect = false;
+      state.selectedWeapon = weaponForStage(stage);
       state.bossPhase = "drop";
-      state.message = stage === 3 ? "Stage 3: robot elevator shaft. Lava under the lifts — reach the machine boss!" : stage === 4 ? "Stage 4: cannon elevator gauntlet. Watch for laser flashes!" : "Stage 5: warship chase. Survive the pass, then shoot it from behind!";
+      state.message = stage === 3 ? "Stage 3: Laser Gun unlocked. Lava under the lifts — reach the machine boss!" : stage === 4 ? "Stage 4: Plasma Rifle unlocked. Watch for laser flashes!" : "Stage 5: Homing Missile unlocked. Survive the warship and final robot!";
     };
 
     const startStage3 = () => loadLaterStage(3);
@@ -530,6 +558,19 @@ export default function RogueBlaster() {
       state.message = `Life lost — ${state.lives} ${state.lives === 1 ? "life" : "lives"} left. Respawned at Stage ${state.stage}.`;
     };
 
+    const addSpecialAmmo = (amount: number) => {
+      state.specialAmmo = clamp(state.specialAmmo + amount, 0, 99);
+      state.message = `+${amount} bullets for special guns. ${weaponName(state.selectedWeapon)} selected.`;
+    };
+
+    const cycleWeapon = () => {
+      const weapons = unlockedWeapons(state.stage);
+      const index = weapons.indexOf(state.selectedWeapon);
+      state.selectedWeapon = weapons[(index + 1 + weapons.length) % weapons.length];
+      state.gunSelect = true;
+      state.message = `${weaponName(state.selectedWeapon)} selected. Special bullets: ${state.specialAmmo}.`;
+    };
+
     const hurtPlayer = (amount: number) => {
       if (state.player.invuln > 0 || state.gameOver || state.won) return;
       state.player.hp -= amount;
@@ -541,7 +582,11 @@ export default function RogueBlaster() {
     const shoot = () => {
       if (!state.started || state.gameOver || state.won || state.stageClear || state.player.cooldown > 0) return;
       const low = state.player.duck;
-      const weapon = weaponForStage(state.stage);
+      const wanted = unlockedWeapons(state.stage).includes(state.selectedWeapon) ? state.selectedWeapon : "handgun";
+      const cost = weaponCost(wanted);
+      const weapon = cost > 0 && state.specialAmmo < cost ? "handgun" : wanted;
+      if (weapon !== wanted) state.message = "No special bullets left — handgun fallback! Kill enemies to earn more.";
+      else state.specialAmmo -= cost;
       const y = low ? GROUND_Y - 13 : state.player.y + 28;
       if (weapon === "machine") {
         state.bullets.push({ x: state.player.x + state.player.facing * 24, y, vx: state.player.facing * 880, life: 0.75, damage: 1, enemy: false, low, kind: "machine" });
@@ -573,13 +618,24 @@ export default function RogueBlaster() {
       if (event.code === "KeyR") {
         event.preventDefault();
         if (!state.started || state.gameOver || state.won) reset();
-        else state.message = "Infinite cells — no reload needed.";
+        else state.message = "Special bullets power non-handgun weapons. Kill enemies for more.";
       }
-      if ((event.code === "KeyW" || event.code === "ArrowUp") && state.started && !state.gameOver && !state.won && state.player.y >= GROUND_Y - PLAYER_H - 1) {
+      if (event.code === "ShiftLeft" || event.code === "ShiftRight") {
+        event.preventDefault();
+        if (!event.repeat && state.started && !state.gameOver && !state.won && !state.stageClear) cycleWeapon();
+      }
+      if ((event.code === "KeyW" || event.code === "ArrowUp") && state.started && !state.gameOver && !state.won && !state.gunSelect && state.player.y >= GROUND_Y - PLAYER_H - 1) {
         event.preventDefault();
         state.player.vy = -660;
       }
-      if (event.code === "Enter" && (!state.started || state.gameOver || state.won)) reset();
+      if (event.code === "Enter") {
+        event.preventDefault();
+        if (!state.started || state.gameOver || state.won) reset();
+        else if (!state.stageClear) {
+          state.gunSelect = !state.gunSelect;
+          state.message = state.gunSelect ? "Gun select open — press Shift to cycle, Enter to close." : `${weaponName(state.selectedWeapon)} ready.`;
+        }
+      }
       updateMusic();
     };
     const onKeyUp = (event: KeyboardEvent) => keys.delete(event.code);
@@ -1012,7 +1068,7 @@ export default function RogueBlaster() {
     };
 
     const update = (dt: number) => {
-      if (!state.started || state.gameOver || state.won || state.stageClear) return;
+      if (!state.started || state.gameOver || state.won || state.stageClear || state.gunSelect) return;
       const p = state.player;
       p.cooldown = Math.max(0, p.cooldown - dt);
       if (keys.has("Space") || keys.has("KeyF")) shoot();
@@ -1136,6 +1192,7 @@ export default function RogueBlaster() {
               crawler.dead = true;
               state.score += 350;
               state.kills += 1;
+              addSpecialAmmo(2);
               burst(state.particles, crawler.x, crawler.y, "#67e8f9", 22);
             }
           }
@@ -1151,6 +1208,7 @@ export default function RogueBlaster() {
             if (robot.hp <= 0) {
               state.score += robot.type === "tank" ? 900 : 450;
               state.kills += 1;
+              addSpecialAmmo(robot.type === "tank" ? 6 : 3);
               burst(state.particles, robot.x, GROUND_Y - height / 2, "#67e8f9", robot.type === "tank" ? 36 : 22);
             }
           }
@@ -1165,6 +1223,7 @@ export default function RogueBlaster() {
               state.helicopter.aliensKilled += 1;
               state.score += 500;
               state.kills += 1;
+              addSpecialAmmo(2);
               burst(state.particles, alien.x, alien.y, "#a7f3d0", 18);
             }
           }
@@ -1179,6 +1238,7 @@ export default function RogueBlaster() {
               if (robot.hp <= 0) {
                 state.score += 320;
                 state.kills += 1;
+                addSpecialAmmo(3);
                 burst(state.particles, robot.x, GROUND_Y - 38, "#93c5fd", 18);
               }
             }
@@ -1192,6 +1252,7 @@ export default function RogueBlaster() {
               if (bot.hp <= 0) {
                 state.score += 900;
                 state.kills += 1;
+                addSpecialAmmo(4);
                 burst(state.particles, bot.x, GROUND_Y - 14, "#fca5a5", 22);
               }
             }
@@ -1253,6 +1314,7 @@ export default function RogueBlaster() {
               if (drone.hp <= 0) {
                 state.score += 650;
                 state.kills += 1;
+                addSpecialAmmo(4);
                 burst(state.particles, drone.x, drone.y, "#86efac", 24);
               }
             }
@@ -1266,6 +1328,7 @@ export default function RogueBlaster() {
               if (launcher.hp <= 0) {
                 state.score += 700;
                 state.kills += 1;
+                addSpecialAmmo(5);
                 burst(state.particles, launcher.x, GROUND_Y - 45, "#bef264", 26);
               }
             }
@@ -1291,6 +1354,7 @@ export default function RogueBlaster() {
             if (giant.hp <= 0) {
               state.score += 2200;
               state.kills += 1;
+              addSpecialAmmo(12);
               burst(state.particles, giant.x, GROUND_Y - 95, "#86efac", 60);
               state.message = "Massive lab robot destroyed!";
             }
@@ -1860,6 +1924,29 @@ export default function RogueBlaster() {
       drawPlayer();
       ctx.restore();
 
+      if (state.gunSelect) {
+        const weapons = unlockedWeapons(state.stage);
+        ctx.fillStyle = "rgba(2,6,23,0.78)";
+        ctx.fillRect(0, 0, w, h);
+        ctx.textAlign = "center";
+        ctx.fillStyle = "#67e8f9";
+        ctx.font = "900 48px Inter, sans-serif";
+        ctx.fillText("GUN SELECT", w / 2, h / 2 - 145);
+        ctx.fillStyle = "#fde047";
+        ctx.font = "900 20px Inter, sans-serif";
+        ctx.fillText(`Special bullets: ${state.specialAmmo}  •  Shift cycles  •  Enter closes`, w / 2, h / 2 - 100);
+        weapons.forEach((weapon, i) => {
+          const y = h / 2 - 42 + i * 44;
+          const selected = weapon === state.selectedWeapon;
+          ctx.fillStyle = selected ? "rgba(34,211,238,0.28)" : "rgba(255,255,255,0.08)";
+          ctx.fillRect(w / 2 - 230, y - 26, 460, 36);
+          ctx.fillStyle = selected ? "#ffffff" : "#cbd5e1";
+          ctx.font = selected ? "900 22px Inter, sans-serif" : "800 18px Inter, sans-serif";
+          const cost = weaponCost(weapon);
+          ctx.fillText(`${selected ? "▶ " : ""}${weaponName(weapon)}${cost ? ` — ${cost} bullets/shot` : " — free"}`, w / 2, y);
+        });
+      }
+
       if (state.stageClear) {
         const pulse = 0.5 + Math.sin(performance.now() * 0.008) * 0.5;
         ctx.fillStyle = "rgba(2,6,23,0.72)";
@@ -1893,7 +1980,7 @@ export default function RogueBlaster() {
         ctx.textAlign = "center";
         ctx.fillStyle = "white";
         ctx.font = "900 50px Inter, sans-serif";
-        ctx.fillText(state.won ? "Lab Tank Down!" : state.gameOver ? "Mission Failed" : "Rough Run: Robot Silius", w / 2, h / 2 - 72);
+        ctx.fillText(state.won ? "Mission Complete!" : state.gameOver ? "Mission Failed" : "Rough Run: Robot Silius", w / 2, h / 2 - 72);
         ctx.fillStyle = "#fde68a";
         ctx.font = "900 19px Inter, sans-serif";
         ctx.fillText(state.won || state.gameOver ? `Score ${state.score.toLocaleString()} • Robots ${state.kills}` : "Clear five stages: helicopter, lab tank, machine, cannon, then spaceship and final robot", w / 2, h / 2 - 24);
@@ -1903,7 +1990,7 @@ export default function RogueBlaster() {
       }
 
       if (hudRef.current) {
-        hudRef.current.innerHTML = `<div><span>Stage</span><strong>${state.stage}/${STAGE_MAX}</strong></div><div><span>Suit</span><strong>${Math.round(state.player.hp)}/${state.player.maxHp}</strong></div><div><span>Lives</span><strong>${state.lives}/3</strong></div><div><span>Weapon</span><strong>${weaponName(weaponForStage(state.stage))}</strong></div><div><span>Boss</span><strong>${state.bossStarted ? (state.stage === 2 ? "tank" : state.stage === 3 ? "machine" : state.stage === 4 ? "cannon" : state.stage === 5 ? "warship" : state.bossPhase) : "Ahead"}</strong></div><div><span>Tip</span><strong>${state.message}</strong></div>`;
+        hudRef.current.innerHTML = `<div><span>Stage</span><strong>${state.stage}/${STAGE_MAX}</strong></div><div><span>Suit</span><strong>${Math.round(state.player.hp)}/${state.player.maxHp}</strong></div><div><span>Lives</span><strong>${state.lives}/3</strong></div><div><span>Gun</span><strong>${weaponName(state.selectedWeapon)}</strong></div><div><span>Bullets</span><strong>${state.specialAmmo}</strong></div><div><span>Tip</span><strong>${state.message}</strong></div>`;
       }
     };
 
