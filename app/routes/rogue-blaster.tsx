@@ -37,13 +37,6 @@ type SpaceshipBoss = { x: number; y: number; hp: number; maxHp: number; active: 
 type FinalRobot = { x: number; hp: number; maxHp: number; active: boolean; flash: number; hitTimer: number; dir: -1 | 1; duckTimer: number };
 type MusicKey = "stage15" | "stage2" | "stage3" | "stage4" | "boss";
 
-type MusicTrack = {
-  tempo: number;
-  bass: number[];
-  lead: number[];
-  arp: number[];
-};
-
 const GROUND_Y = 500;
 const WORLD_W = 5200;
 const PLAYER_W = 34;
@@ -67,37 +60,12 @@ const FINAL_ROBOT_EDGE_PAD = 135;
 const MACHINE_SAFE_X = BOSS_X - 370;
 const MACHINE_SAFE_W = 175;
 
-const MUSIC_TRACKS: Record<MusicKey, MusicTrack> = {
-  stage15: {
-    tempo: 154,
-    bass: [40, 40, 47, 40, 43, 43, 47, 43, 38, 38, 45, 38, 40, 40, 47, 52],
-    lead: [64, -1, 67, 69, 71, -1, 69, 67, 64, 62, 64, -1, 67, 69, 74, 71],
-    arp: [52, 55, 59, 64, 52, 55, 59, 64, 50, 53, 57, 62, 48, 52, 55, 60],
-  },
-  stage2: {
-    tempo: 148,
-    bass: [36, 36, 43, 36, 39, 39, 46, 39, 41, 41, 48, 41, 39, 39, 46, 39],
-    lead: [67, 70, -1, 67, 72, -1, 70, 67, 65, 67, 70, 72, 74, -1, 72, 70],
-    arp: [48, 51, 55, 60, 51, 55, 60, 63, 53, 56, 60, 65, 51, 55, 58, 63],
-  },
-  stage3: {
-    tempo: 142,
-    bass: [35, 35, 42, 35, 34, 34, 41, 34, 37, 37, 44, 37, 34, 34, 41, 34],
-    lead: [62, -1, 65, -1, 66, 65, 62, -1, 58, -1, 62, 63, 65, -1, 63, 62],
-    arp: [47, 50, 54, 59, 46, 49, 53, 58, 49, 52, 56, 61, 46, 49, 53, 58],
-  },
-  stage4: {
-    tempo: 160,
-    bass: [38, 38, 45, 50, 38, 38, 45, 50, 41, 41, 48, 53, 43, 43, 50, 55],
-    lead: [69, 71, 72, -1, 76, 74, 72, 71, 69, 71, 74, -1, 77, 76, 74, 72],
-    arp: [50, 53, 57, 62, 50, 53, 57, 62, 53, 57, 60, 65, 55, 59, 62, 67],
-  },
-  boss: {
-    tempo: 176,
-    bass: [36, 43, 36, 46, 36, 43, 36, 48, 35, 42, 35, 45, 35, 42, 35, 47],
-    lead: [72, -1, 72, 75, 74, -1, 72, 70, 69, -1, 69, 72, 71, -1, 69, 67],
-    arp: [48, 55, 60, 63, 48, 55, 60, 63, 47, 54, 59, 62, 47, 54, 59, 62],
-  },
+const MUSIC_PATHS: Record<MusicKey, string> = {
+  stage15: "/music/rough-run/stage1-final.vgm",
+  stage2: "/music/rough-run/stage2.vgm",
+  stage3: "/music/rough-run/stage3.vgm",
+  stage4: "/music/rough-run/stage4.vgm",
+  boss: "/music/rough-run/boss.vgm",
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -279,48 +247,114 @@ export default function RogueBlaster() {
 
     let audioCtx: AudioContext | null = null;
     let musicGain: GainNode | null = null;
-    let musicStep = 0;
-    let musicNextTime = 0;
+    let musicSource: AudioBufferSourceNode | null = null;
     let musicKey: MusicKey | null = null;
-
-    const midiToHz = (note: number) => 440 * 2 ** ((note - 69) / 12);
+    let loadingMusicKey: MusicKey | null = null;
+    const musicCache = new Map<MusicKey, AudioBuffer>();
 
     const ensureAudio = () => {
       if (!audioCtx) {
         audioCtx = new AudioContext();
         musicGain = audioCtx.createGain();
-        musicGain.gain.value = 0.16;
+        musicGain.gain.value = 0.24;
         musicGain.connect(audioCtx.destination);
       }
       if (audioCtx.state === "suspended") void audioCtx.resume();
     };
 
-    const playOsc = (note: number, time: number, dur: number, type: OscillatorType, gainValue: number) => {
-      if (!audioCtx || !musicGain || note < 0) return;
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = type;
-      osc.frequency.setValueAtTime(midiToHz(note), time);
-      gain.gain.setValueAtTime(0.0001, time);
-      gain.gain.exponentialRampToValueAtTime(gainValue, time + 0.015);
-      gain.gain.exponentialRampToValueAtTime(0.0001, time + dur);
-      osc.connect(gain).connect(musicGain);
-      osc.start(time);
-      osc.stop(time + dur + 0.02);
-    };
+    const readU32 = (data: Uint8Array, offset: number) =>
+      (data[offset] ?? 0) | ((data[offset + 1] ?? 0) << 8) | ((data[offset + 2] ?? 0) << 16) | ((data[offset + 3] ?? 0) << 24);
 
-    const playNoise = (time: number, dur: number, gainValue: number) => {
-      if (!audioCtx || !musicGain) return;
-      const buffer = audioCtx.createBuffer(1, Math.max(1, Math.floor(audioCtx.sampleRate * dur)), audioCtx.sampleRate);
-      const data = buffer.getChannelData(0);
-      for (let i = 0; i < data.length; i += 1) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
-      const src = audioCtx.createBufferSource();
-      const gain = audioCtx.createGain();
-      src.buffer = buffer;
-      gain.gain.setValueAtTime(gainValue, time);
-      gain.gain.exponentialRampToValueAtTime(0.0001, time + dur);
-      src.connect(gain).connect(musicGain);
-      src.start(time);
+    const renderNesVgm = (bytes: ArrayBuffer, ctxForBuffer: AudioContext) => {
+      const data = new Uint8Array(bytes);
+      const sampleRate = ctxForBuffer.sampleRate;
+      const totalSamples = Math.max(sampleRate * 18, Math.min(sampleRate * 210, readU32(data, 0x18) || sampleRate * 90));
+      const pcm = new Float32Array(totalSamples);
+      const cpu = 1789773;
+      const noisePeriods = [4, 8, 16, 32, 64, 96, 128, 160, 202, 254, 380, 508, 762, 1016, 2034, 4068];
+      const pulse = [
+        { en: false, duty: 0.125, vol: 0, timer: 0, phase: 0 },
+        { en: false, duty: 0.125, vol: 0, timer: 0, phase: 0 },
+      ];
+      const tri = { en: false, timer: 0, phase: 0, on: false };
+      const noise = { en: false, vol: 0, timer: 4, phase: 0, lfsr: 1 };
+      let writeHead = 0;
+      const renderWait = (samples: number) => {
+        const end = Math.min(totalSamples, writeHead + samples);
+        for (; writeHead < end; writeHead += 1) {
+          let mix = 0;
+          for (const pch of pulse) {
+            if (pch.en && pch.vol > 0 && pch.timer > 7) {
+              const freq = cpu / (16 * (pch.timer + 1));
+              pch.phase = (pch.phase + freq / sampleRate) % 1;
+              mix += (pch.phase < pch.duty ? 1 : -1) * pch.vol * 0.11;
+            }
+          }
+          if (tri.en && tri.on && tri.timer > 1) {
+            const freq = cpu / (32 * (tri.timer + 1));
+            tri.phase = (tri.phase + freq / sampleRate) % 1;
+            mix += (Math.abs(tri.phase * 2 - 1) * 2 - 1) * 0.13;
+          }
+          if (noise.en && noise.vol > 0) {
+            const freq = cpu / (16 * noise.timer);
+            noise.phase += freq / sampleRate;
+            while (noise.phase >= 1) {
+              const bit = (noise.lfsr ^ (noise.lfsr >> 1)) & 1;
+              noise.lfsr = (noise.lfsr >> 1) | (bit << 14);
+              noise.phase -= 1;
+            }
+            mix += (noise.lfsr & 1 ? 1 : -1) * noise.vol * 0.055;
+          }
+          pcm[writeHead] = clamp(mix, -0.95, 0.95);
+        }
+      };
+      const writeApu = (addr: number, value: number) => {
+        if (addr >= 0x00 && addr <= 0x03) {
+          const pch = pulse[0];
+          if (addr === 0x00) {
+            pch.duty = [0.125, 0.25, 0.5, 0.75][value >> 6] ?? 0.125;
+            pch.vol = (value & 0x10 ? value & 0x0f : value & 0x0f) / 15;
+          } else if (addr === 0x02) pch.timer = (pch.timer & 0x700) | value;
+          else if (addr === 0x03) pch.timer = ((value & 7) << 8) | (pch.timer & 0xff);
+        } else if (addr >= 0x04 && addr <= 0x07) {
+          const pch = pulse[1];
+          if (addr === 0x04) {
+            pch.duty = [0.125, 0.25, 0.5, 0.75][value >> 6] ?? 0.125;
+            pch.vol = (value & 0x10 ? value & 0x0f : value & 0x0f) / 15;
+          } else if (addr === 0x06) pch.timer = (pch.timer & 0x700) | value;
+          else if (addr === 0x07) pch.timer = ((value & 7) << 8) | (pch.timer & 0xff);
+        } else if (addr >= 0x08 && addr <= 0x0b) {
+          if (addr === 0x08) tri.on = (value & 0x7f) > 0;
+          else if (addr === 0x0a) tri.timer = (tri.timer & 0x700) | value;
+          else if (addr === 0x0b) tri.timer = ((value & 7) << 8) | (tri.timer & 0xff);
+        } else if (addr >= 0x0c && addr <= 0x0f) {
+          if (addr === 0x0c) noise.vol = (value & 0x0f) / 15;
+          else if (addr === 0x0e) noise.timer = noisePeriods[value & 0x0f] ?? 4;
+        } else if (addr === 0x15) {
+          pulse[0].en = !!(value & 1);
+          pulse[1].en = !!(value & 2);
+          tri.en = !!(value & 4);
+          noise.en = !!(value & 8);
+        }
+      };
+      let i = (readU32(data, 0x34) ? readU32(data, 0x34) + 0x34 : 0x40);
+      while (i < data.length && writeHead < totalSamples) {
+        const cmd = data[i++];
+        if (cmd === 0x66) break;
+        if (cmd === 0x61) { renderWait((data[i] ?? 0) | ((data[i + 1] ?? 0) << 8)); i += 2; }
+        else if (cmd === 0x62) renderWait(735);
+        else if (cmd === 0x63) renderWait(882);
+        else if (cmd >= 0x70 && cmd <= 0x7f) renderWait((cmd & 0x0f) + 1);
+        else if (cmd === 0xb4) { writeApu(data[i] ?? 0, data[i + 1] ?? 0); i += 2; }
+        else if (cmd === 0x67 && data[i] === 0x66) { i += 2; const size = readU32(data, i); i += 4 + size; }
+        else if (cmd >= 0x30 && cmd <= 0x4f) i += 1;
+        else if ((cmd >= 0x50 && cmd <= 0x5f) || (cmd >= 0xa0 && cmd <= 0xbf)) i += 2;
+        else if (cmd >= 0xc0 && cmd <= 0xdf) i += 3;
+        else if (cmd >= 0xe0) i += 4;
+      }
+      const buffer = ctxForBuffer.createBuffer(1, Math.max(1, writeHead), sampleRate);
+      buffer.copyToChannel(pcm.subarray(0, writeHead), 0);
+      return buffer;
     };
 
     const desiredMusicKey = (): MusicKey => {
@@ -331,31 +365,35 @@ export default function RogueBlaster() {
       return "stage15";
     };
 
+    const startMusic = async (key: MusicKey) => {
+      if (!audioCtx || !musicGain || loadingMusicKey === key) return;
+      loadingMusicKey = key;
+      let buffer = musicCache.get(key);
+      if (!buffer) {
+        const response = await fetch(MUSIC_PATHS[key]);
+        buffer = renderNesVgm(await response.arrayBuffer(), audioCtx);
+        musicCache.set(key, buffer);
+      }
+      loadingMusicKey = null;
+      if (!audioCtx || !musicGain || desiredMusicKey() !== key || !state.started || state.gameOver || state.won) return;
+      musicSource?.stop();
+      musicSource = audioCtx.createBufferSource();
+      musicSource.buffer = buffer;
+      musicSource.loop = true;
+      musicSource.connect(musicGain);
+      musicSource.start();
+      musicKey = key;
+    };
+
     const updateMusic = () => {
       if (!audioCtx || !musicGain) return;
       if (!state.started || state.gameOver || state.won) {
         musicGain.gain.setTargetAtTime(0.0001, audioCtx.currentTime, 0.08);
         return;
       }
-      musicGain.gain.setTargetAtTime(0.16, audioCtx.currentTime, 0.08);
+      musicGain.gain.setTargetAtTime(0.24, audioCtx.currentTime, 0.08);
       const nextKey = desiredMusicKey();
-      if (musicKey !== nextKey) {
-        musicKey = nextKey;
-        musicStep = 0;
-        musicNextTime = audioCtx.currentTime + 0.04;
-      }
-      const track = MUSIC_TRACKS[musicKey];
-      const stepDur = 60 / track.tempo / 4;
-      while (musicNextTime < audioCtx.currentTime + 0.14) {
-        const i = musicStep % 16;
-        playOsc(track.bass[i], musicNextTime, stepDur * 0.85, "square", 0.12);
-        playOsc(track.arp[i], musicNextTime + stepDur * 0.45, stepDur * 0.42, "triangle", 0.055);
-        if (track.lead[i] >= 0) playOsc(track.lead[i], musicNextTime, stepDur * (i % 4 === 3 ? 1.7 : 0.9), "sawtooth", 0.05);
-        if (i % 4 === 0) playOsc(31, musicNextTime, 0.09, "sine", 0.18);
-        if (i % 4 === 2) playNoise(musicNextTime, 0.055, 0.035);
-        musicStep += 1;
-        musicNextTime += stepDur;
-      }
+      if (musicKey !== nextKey || !musicSource) void startMusic(nextKey);
     };
 
     const reset = () => {
