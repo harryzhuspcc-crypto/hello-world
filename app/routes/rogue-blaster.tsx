@@ -14,7 +14,8 @@ export function meta({}: Route.MetaArgs) {
 }
 
 type BossLane = "high" | "mid" | "low";
-type Bullet = { x: number; y: number; vx: number; vy?: number; life: number; damage: number; enemy: boolean; low: boolean; lane?: BossLane };
+type WeaponKey = "handgun" | "machine" | "laser" | "plasma" | "missile";
+type Bullet = { x: number; y: number; vx: number; vy?: number; life: number; damage: number; enemy: boolean; low: boolean; lane?: BossLane; kind?: WeaponKey };
 type Robot = { x: number; y: number; hp: number; maxHp: number; speed: number; active: boolean; flash: number; shootTimer: number; type: "walker" | "gunner" | "tank" };
 type Crawler = { x: number; y: number; hp: number; dead: boolean; flash: number };
 type Alien = { x: number; y: number; vx: number; vy: number; hp: number; flash: number; active: boolean; jumpTimer: number; targetDir: -1 | 1 };
@@ -91,6 +92,22 @@ function bossLaneMessage(lane: BossLane) {
   if (lane === "high") return "HIGH SHOT — DUCK!";
   if (lane === "mid") return "MID SHOT — DUCK OR JUMP!";
   return "LOW SHOT — JUMP!";
+}
+
+function weaponForStage(stage: number): WeaponKey {
+  if (stage >= 5) return "missile";
+  if (stage === 4) return "plasma";
+  if (stage === 3) return "laser";
+  if (stage === 2) return "machine";
+  return "handgun";
+}
+
+function weaponName(weapon: WeaponKey) {
+  if (weapon === "machine") return "Machine Gun";
+  if (weapon === "laser") return "Laser Gun";
+  if (weapon === "plasma") return "Plasma Rifle";
+  if (weapon === "missile") return "Homing Missile";
+  return "Handgun";
 }
 
 function makeRobots(): Robot[] {
@@ -224,6 +241,7 @@ export default function RogueBlaster() {
       won: false,
       lives: 3,
       finalArena: false,
+      stageClear: null as null | { from: number; to: number; weapon: string },
       score: 0,
       kills: 0,
       bossStarted: false,
@@ -302,7 +320,7 @@ export default function RogueBlaster() {
       return "stage15";
     };
 
-    const playJingle = (key: keyof typeof JINGLE_PATHS) => {
+    const playJingle = (key: keyof typeof JINGLE_PATHS, onDone?: () => void) => {
       ensureAudio();
       currentMusic?.pause();
       jinglePlaying = true;
@@ -310,6 +328,7 @@ export default function RogueBlaster() {
       el.currentTime = 0;
       el.onended = () => {
         jinglePlaying = false;
+        onDone?.();
         musicKey = null;
         currentMusic = null;
         updateMusic();
@@ -317,6 +336,17 @@ export default function RogueBlaster() {
       const playPromise = el.play();
       if (playPromise) void playPromise.catch(() => {
         jinglePlaying = false;
+        onDone?.();
+      });
+    };
+
+    const beginStageClear = (toStage: number, startNextStage: () => void) => {
+      state.stageClear = { from: state.stage, to: toStage, weapon: weaponName(weaponForStage(toStage)) };
+      state.bullets = [];
+      state.message = `Stage ${state.stage} clear — ${weaponName(weaponForStage(toStage))} unlocked!`;
+      playJingle("stageClear", () => {
+        state.stageClear = null;
+        startNextStage();
       });
     };
 
@@ -377,6 +407,7 @@ export default function RogueBlaster() {
       state.won = false;
       state.lives = 3;
       state.finalArena = false;
+      state.stageClear = null;
       state.score = 0;
       state.kills = 0;
       state.bossStarted = false;
@@ -418,6 +449,7 @@ export default function RogueBlaster() {
       state.cameraX = 0;
       state.bossStarted = false;
       state.finalArena = false;
+      state.stageClear = null;
       state.bossPhase = "drop";
       state.bossShotTimer = 1.2;
       state.message = "Stage 2: green robot lab. Infinite bullets — jump-shoot drones!";
@@ -448,6 +480,7 @@ export default function RogueBlaster() {
       state.cameraX = 0;
       state.bossStarted = false;
       state.finalArena = false;
+      state.stageClear = null;
       state.bossPhase = "drop";
       state.message = stage === 3 ? "Stage 3: robot elevator shaft. Lava under the lifts — reach the machine boss!" : stage === 4 ? "Stage 4: cannon elevator gauntlet. Watch for laser flashes!" : "Stage 5: warship chase. Survive the pass, then shoot it from behind!";
     };
@@ -506,11 +539,27 @@ export default function RogueBlaster() {
     };
 
     const shoot = () => {
-      if (!state.started || state.gameOver || state.won || state.player.cooldown > 0) return;
+      if (!state.started || state.gameOver || state.won || state.stageClear || state.player.cooldown > 0) return;
       const low = state.player.duck;
+      const weapon = weaponForStage(state.stage);
       const y = low ? GROUND_Y - 13 : state.player.y + 28;
-      state.bullets.push({ x: state.player.x + state.player.facing * 24, y, vx: state.player.facing * 760, life: 0.9, damage: 1, enemy: false, low });
-      state.player.cooldown = 0.1;
+      if (weapon === "machine") {
+        state.bullets.push({ x: state.player.x + state.player.facing * 24, y, vx: state.player.facing * 880, life: 0.75, damage: 1, enemy: false, low, kind: "machine" });
+        state.player.cooldown = 0.045;
+      } else if (weapon === "laser") {
+        state.bullets.push({ x: state.player.x + state.player.facing * 28, y: low ? GROUND_Y - 14 : state.player.y + 22, vx: state.player.facing * 1180, life: 0.62, damage: 2, enemy: false, low, kind: "laser" });
+        state.player.cooldown = 0.12;
+      } else if (weapon === "plasma") {
+        state.bullets.push({ x: state.player.x + state.player.facing * 28, y: low ? GROUND_Y - 14 : state.player.y + 20, vx: state.player.facing * 1040, vy: -70, life: 0.72, damage: 2, enemy: false, low, kind: "plasma" });
+        state.bullets.push({ x: state.player.x + state.player.facing * 28, y: low ? GROUND_Y - 14 : state.player.y + 35, vx: state.player.facing * 1040, vy: 70, life: 0.72, damage: 2, enemy: false, low, kind: "plasma" });
+        state.player.cooldown = 0.18;
+      } else if (weapon === "missile") {
+        state.bullets.push({ x: state.player.x + state.player.facing * 28, y: low ? GROUND_Y - 16 : state.player.y + 22, vx: state.player.facing * 470, vy: -25, life: 1.9, damage: 4, enemy: false, low, kind: "missile" });
+        state.player.cooldown = 0.34;
+      } else {
+        state.bullets.push({ x: state.player.x + state.player.facing * 24, y, vx: state.player.facing * 760, life: 0.9, damage: 1, enemy: false, low, kind: "handgun" });
+        state.player.cooldown = 0.14;
+      }
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
@@ -627,8 +676,7 @@ export default function RogueBlaster() {
           state.score += 8000;
           state.message = "Stage 1 complete — entering the robot lab!";
           burst(state.particles, heli.x, heli.y, "#fde047", 80);
-          playJingle("stageClear");
-          startStage2();
+          beginStageClear(2, startStage2);
         }
       }
     };
@@ -858,8 +906,12 @@ export default function RogueBlaster() {
             bot.hitTimer = 0.6;
           }
         } else {
-          playJingle("stageClear");
-          state.won = true;
+          state.stageClear = { from: 5, to: 5, weapon: "Mission Complete" };
+          playJingle("stageClear", () => {
+            state.stageClear = null;
+            state.won = true;
+            state.message = "Stage 5 clear — mission complete!";
+          });
           state.message = "Stage 5 clear — mission complete!";
         }
       }
@@ -925,20 +977,45 @@ export default function RogueBlaster() {
       if (state.stage === 3 && state.bossStarted && state.machineBoss.hp <= 0) {
         state.score += 12000;
         state.message = "Machine boss destroyed — Stage 4 begins!";
-        playJingle("stageClear");
-        startStage4();
+        beginStageClear(4, startStage4);
       } else if (state.stage === 4 && state.bossStarted && state.cannonBoss.hp <= 0) {
         state.score += 14000;
         state.message = "Cannon boss destroyed — Stage 5 begins!";
-        playJingle("stageClear");
-        startStage5();
+        beginStageClear(5, startStage5);
       }
     };
 
+    const nearestHomingTarget = (bullet: Bullet) => {
+      const targets: { x: number; y: number }[] = [];
+      for (const r of state.robots) if (r.hp > 0) targets.push({ x: r.x, y: GROUND_Y - robotHeight(r) / 2 });
+      for (const c of state.crawlers) if (!c.dead) targets.push({ x: c.x, y: c.y });
+      for (const a of state.aliens) if (a.hp > 0) targets.push({ x: a.x, y: a.y - 12 });
+      for (const d of state.drones) if (d.hp > 0) targets.push({ x: d.x, y: d.y });
+      for (const l of state.launchers) if (l.hp > 0) targets.push({ x: l.x, y: GROUND_Y - 45 });
+      for (const m of state.missiles) if (!m.dead) targets.push({ x: m.x, y: m.y });
+      for (const r of state.stage3Robots) if (r.hp > 0) targets.push({ x: r.x, y: GROUND_Y - 38 });
+      for (const b of state.smallBots) if (b.hp > 0) targets.push({ x: b.x, y: GROUND_Y - 14 });
+      for (const t of state.floorTraps) if (t.hp > 0 && t.popped) targets.push({ x: t.x, y: GROUND_Y - 28 });
+      if (state.giantBot.hp > 0) targets.push({ x: state.giantBot.x, y: GROUND_Y - 95 });
+      if (state.tankBoss.hp > 0 && state.bossStarted) targets.push({ x: state.tankBoss.x, y: GROUND_Y - 55 });
+      if (state.machineBoss.hp > 0 && state.bossStarted) targets.push({ x: state.machineBoss.x, y: GROUND_Y - 193 });
+      if (state.cannonBoss.hp > 0 && state.bossStarted) targets.push({ x: state.cannonBoss.x, y: GROUND_Y - 145 });
+      if (state.spaceshipBoss.hp > 0 && state.bossStarted) targets.push({ x: state.spaceshipBoss.x, y: state.spaceshipBoss.y });
+      if (state.finalRobot.hp > 0 && state.finalRobot.active) targets.push({ x: state.finalRobot.x, y: GROUND_Y - 80 });
+      let best: { x: number; y: number } | null = null;
+      let bestD = Infinity;
+      for (const target of targets) {
+        const d = (target.x - bullet.x) ** 2 + (target.y - bullet.y) ** 2;
+        if (d < bestD) { bestD = d; best = target; }
+      }
+      return best;
+    };
+
     const update = (dt: number) => {
-      if (!state.started || state.gameOver || state.won) return;
+      if (!state.started || state.gameOver || state.won || state.stageClear) return;
       const p = state.player;
       p.cooldown = Math.max(0, p.cooldown - dt);
+      if (keys.has("Space") || keys.has("KeyF")) shoot();
       p.invuln = Math.max(0, p.invuln - dt);
       p.duck = keys.has("KeyS") || keys.has("ArrowDown");
       if (p.reload > 0) {
@@ -1022,6 +1099,16 @@ export default function RogueBlaster() {
       }
 
       for (const bullet of state.bullets) {
+        if (!bullet.enemy && bullet.kind === "missile") {
+          const target = nearestHomingTarget(bullet);
+          if (target) {
+            const dx = target.x - bullet.x;
+            const dy = target.y - bullet.y;
+            const len = Math.hypot(dx, dy) || 1;
+            bullet.vx += ((dx / len) * 620 - bullet.vx) * 0.08;
+            bullet.vy = (bullet.vy ?? 0) + ((dy / len) * 620 - (bullet.vy ?? 0)) * 0.08;
+          }
+        }
         bullet.x += bullet.vx * dt;
         bullet.y += (bullet.vy ?? 0) * dt;
         bullet.life -= dt;
@@ -1071,7 +1158,7 @@ export default function RogueBlaster() {
         for (const alien of state.aliens) {
           if (alien.hp <= 0 || bullet.life <= 0) continue;
           if (rectsOverlap({ x: bullet.x - 7, y: bullet.y - 4, w: 14, h: 8 }, { x: alien.x - 18, y: alien.y - 30, w: 36, h: 38 })) {
-            alien.hp -= 1;
+            alien.hp -= bullet.damage;
             alien.flash = 1;
             bullet.life = 0;
             if (alien.hp <= 0) {
@@ -1086,7 +1173,7 @@ export default function RogueBlaster() {
           for (const robot of state.stage3Robots) {
             if (robot.hp <= 0 || bullet.life <= 0) continue;
             if (rectsOverlap({ x: bullet.x - 7, y: bullet.y - 4, w: 14, h: 8 }, { x: robot.x - 22, y: GROUND_Y - 74, w: 44, h: 74 })) {
-              robot.hp -= 1;
+              robot.hp -= bullet.damage;
               robot.flash = 1;
               bullet.life = 0;
               if (robot.hp <= 0) {
@@ -1099,7 +1186,7 @@ export default function RogueBlaster() {
           for (const bot of state.smallBots) {
             if (bot.hp <= 0 || bullet.life <= 0) continue;
             if (rectsOverlap({ x: bullet.x - 7, y: bullet.y - 4, w: 14, h: 8 }, { x: bot.x - 17, y: GROUND_Y - 26, w: 34, h: 26 })) {
-              bot.hp -= 1;
+              bot.hp -= bullet.damage;
               bot.flash = 1;
               bullet.life = 0;
               if (bot.hp <= 0) {
@@ -1114,7 +1201,7 @@ export default function RogueBlaster() {
           for (const trap of state.floorTraps) {
             if (trap.hp <= 0 || bullet.life <= 0 || !trap.popped || !bullet.low) continue;
             if (rectsOverlap({ x: bullet.x - 7, y: bullet.y - 4, w: 14, h: 8 }, { x: trap.x - 25, y: GROUND_Y - 48, w: 50, h: 42 })) {
-              trap.hp -= 1;
+              trap.hp -= bullet.damage;
               trap.flash = 1;
               bullet.life = 0;
               if (trap.hp <= 0) {
@@ -1129,18 +1216,18 @@ export default function RogueBlaster() {
           if (inMachineSafeSpot()) {
             state.message = "You are safe there, but the wall blocks the angle — step out to damage it!";
           } else {
-            state.machineBoss.hp -= 1;
+            state.machineBoss.hp -= bullet.damage;
             state.machineBoss.flash = 1;
           }
         }
         if (state.stage === 4 && state.bossStarted && state.cannonBoss.hp > 0 && bullet.life > 0 && rectsOverlap({ x: bullet.x - 7, y: bullet.y - 4, w: 14, h: 8 }, { x: state.cannonBoss.x - 36, y: GROUND_Y - 174, w: 72, h: 58 })) {
-          state.cannonBoss.hp -= 1;
+          state.cannonBoss.hp -= bullet.damage;
           state.cannonBoss.flash = 1;
           bullet.life = 0;
         }
         if (state.stage === 5 && state.bossStarted && bullet.life > 0) {
           if (state.spaceshipBoss.hp > 0 && state.spaceshipBoss.phase === "retreat" && rectsOverlap({ x: bullet.x - 7, y: bullet.y - 4, w: 14, h: 8 }, { x: state.spaceshipBoss.x - 145, y: state.spaceshipBoss.y - 58, w: 290, h: 116 })) {
-            state.spaceshipBoss.hp -= 1;
+            state.spaceshipBoss.hp -= bullet.damage;
             state.spaceshipBoss.flash = 1;
             bullet.life = 0;
             if (state.spaceshipBoss.hp <= 0) {
@@ -1150,7 +1237,7 @@ export default function RogueBlaster() {
               startFinalArena();
             }
           } else if (state.spaceshipBoss.hp <= 0 && state.finalRobot.hp > 0 && rectsOverlap({ x: bullet.x - 7, y: bullet.y - 4, w: 14, h: 8 }, { x: state.finalRobot.x - 48, y: GROUND_Y - (state.finalRobot.duckTimer > 0 ? 68 : 146), w: 96, h: state.finalRobot.duckTimer > 0 ? 68 : 146 })) {
-            state.finalRobot.hp -= 1;
+            state.finalRobot.hp -= bullet.damage;
             state.finalRobot.flash = 1;
             bullet.life = 0;
             if (state.finalRobot.hp <= 0) burst(state.particles, state.finalRobot.x, GROUND_Y - 80, "#fde047", 90);
@@ -1160,7 +1247,7 @@ export default function RogueBlaster() {
           for (const drone of state.drones) {
             if (drone.hp <= 0 || bullet.life <= 0) continue;
             if (rectsOverlap({ x: bullet.x - 7, y: bullet.y - 4, w: 14, h: 8 }, { x: drone.x - 28, y: drone.y - 18, w: 56, h: 36 })) {
-              drone.hp -= 1;
+              drone.hp -= bullet.damage;
               drone.flash = 1;
               bullet.life = 0;
               if (drone.hp <= 0) {
@@ -1173,7 +1260,7 @@ export default function RogueBlaster() {
           for (const launcher of state.launchers) {
             if (launcher.hp <= 0 || bullet.life <= 0) continue;
             if (rectsOverlap({ x: bullet.x - 7, y: bullet.y - 4, w: 14, h: 8 }, { x: launcher.x - 25, y: GROUND_Y - 74, w: 50, h: 74 })) {
-              launcher.hp -= 1;
+              launcher.hp -= bullet.damage;
               launcher.flash = 1;
               bullet.life = 0;
               if (launcher.hp <= 0) {
@@ -1186,7 +1273,7 @@ export default function RogueBlaster() {
           for (const missile of state.missiles) {
             if (missile.dead || bullet.life <= 0 || !bullet.low) continue;
             if (rectsOverlap({ x: bullet.x - 7, y: bullet.y - 4, w: 14, h: 8 }, { x: missile.x - 16, y: missile.y - 24, w: 32, h: 48 })) {
-              missile.hp -= 1;
+              missile.hp -= bullet.damage;
               missile.flash = 1;
               bullet.life = 0;
               if (missile.hp <= 0) {
@@ -1198,7 +1285,7 @@ export default function RogueBlaster() {
           }
           const giant = state.giantBot;
           if (giant.hp > 0 && bullet.life > 0 && rectsOverlap({ x: bullet.x - 7, y: bullet.y - 4, w: 14, h: 8 }, { x: giant.x - 48, y: GROUND_Y - 190, w: 96, h: 190 })) {
-            giant.hp -= 1;
+            giant.hp -= bullet.damage;
             giant.flash = 1;
             bullet.life = 0;
             if (giant.hp <= 0) {
@@ -1210,15 +1297,14 @@ export default function RogueBlaster() {
           }
           const tank = state.tankBoss;
           if (state.bossStarted && tank.hp > 0 && bullet.life > 0 && rectsOverlap({ x: bullet.x - 7, y: bullet.y - 4, w: 14, h: 8 }, { x: tank.x - 95, y: GROUND_Y - 92, w: 190, h: 92 })) {
-            tank.hp -= 1;
+            tank.hp -= bullet.damage;
             tank.flash = 1;
             bullet.life = 0;
             if (tank.hp <= 0) {
               state.score += 10000;
               state.message = "Stage 2 tank defeated — going down to Stage 3!";
               burst(state.particles, tank.x, GROUND_Y - 55, "#fde047", 90);
-              playJingle("stageClear");
-              startStage3();
+              beginStageClear(3, startStage3);
             }
           }
         }
@@ -1228,7 +1314,7 @@ export default function RogueBlaster() {
             const cx = state.helicopter.x + cannon.ox;
             const cy = state.helicopter.y + cannon.oy;
             if (rectsOverlap({ x: bullet.x - 7, y: bullet.y - 4, w: 14, h: 8 }, { x: cx - 24, y: cy - 18, w: 48, h: 36 })) {
-              cannon.hp -= 1;
+              cannon.hp -= bullet.damage;
               cannon.flash = 1;
               bullet.life = 0;
               if (cannon.hp <= 0) {
@@ -1736,6 +1822,26 @@ export default function RogueBlaster() {
           ctx.fillRect(bullet.x - 20, bullet.y - 5, 40, 10);
           ctx.fillStyle = "rgba(255,255,255,0.85)";
           ctx.fillRect(bullet.x - 15, bullet.y - 1, 30, 2);
+        } else if (!bullet.enemy && bullet.kind === "laser") {
+          ctx.strokeStyle = "#67e8f9";
+          ctx.lineWidth = 5;
+          ctx.beginPath();
+          ctx.moveTo(bullet.x - Math.sign(bullet.vx) * 28, bullet.y);
+          ctx.lineTo(bullet.x + Math.sign(bullet.vx) * 22, bullet.y);
+          ctx.stroke();
+          ctx.lineWidth = 1;
+        } else if (!bullet.enemy && bullet.kind === "plasma") {
+          ctx.fillStyle = "#a78bfa";
+          ctx.beginPath();
+          ctx.ellipse(bullet.x, bullet.y, 11, 6, 0, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (!bullet.enemy && bullet.kind === "missile") {
+          ctx.fillStyle = "#f97316";
+          ctx.fillRect(bullet.x - 10, bullet.y - 5, 20, 10);
+          ctx.fillStyle = "#fde047";
+          ctx.beginPath();
+          ctx.arc(bullet.x - Math.sign(bullet.vx || 1) * 12, bullet.y, 5, 0, Math.PI * 2);
+          ctx.fill();
         } else {
           ctx.fillStyle = bullet.enemy ? "#fb7185" : bullet.low ? "#22d3ee" : "#fde047";
           ctx.beginPath();
@@ -1754,6 +1860,33 @@ export default function RogueBlaster() {
       drawPlayer();
       ctx.restore();
 
+      if (state.stageClear) {
+        const pulse = 0.5 + Math.sin(performance.now() * 0.008) * 0.5;
+        ctx.fillStyle = "rgba(2,6,23,0.72)";
+        ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = `rgba(34,211,238,${0.18 + pulse * 0.18})`;
+        for (let i = 0; i < 9; i += 1) {
+          ctx.beginPath();
+          ctx.arc(w / 2, h / 2, 90 + i * 38 + pulse * 18, 0, Math.PI * 2);
+          ctx.strokeStyle = i % 2 ? "rgba(253,224,71,0.45)" : "rgba(34,211,238,0.45)";
+          ctx.lineWidth = 3;
+          ctx.stroke();
+        }
+        ctx.textAlign = "center";
+        ctx.fillStyle = "#fde047";
+        ctx.font = "900 58px Inter, sans-serif";
+        ctx.fillText(`STAGE ${state.stageClear.from} CLEAR!`, w / 2, h / 2 - 82);
+        ctx.fillStyle = "white";
+        ctx.font = "900 30px Inter, sans-serif";
+        ctx.fillText(state.stageClear.to === state.stageClear.from ? "MISSION COMPLETE" : `NEXT: STAGE ${state.stageClear.to}`, w / 2, h / 2 - 22);
+        ctx.fillStyle = "#67e8f9";
+        ctx.font = "900 24px Inter, sans-serif";
+        ctx.fillText(`NEW WEAPON: ${state.stageClear.weapon}`, w / 2, h / 2 + 34);
+        ctx.fillStyle = "#cbd5e1";
+        ctx.font = "800 15px Inter, sans-serif";
+        ctx.fillText("Stage clear music is playing — next stage starts when it ends.", w / 2, h / 2 + 78);
+      }
+
       if (!state.started || state.gameOver || state.won) {
         ctx.fillStyle = "rgba(2,6,23,0.78)";
         ctx.fillRect(0, 0, w, h);
@@ -1770,7 +1903,7 @@ export default function RogueBlaster() {
       }
 
       if (hudRef.current) {
-        hudRef.current.innerHTML = `<div><span>Stage</span><strong>${state.stage}/${STAGE_MAX}</strong></div><div><span>Suit</span><strong>${Math.round(state.player.hp)}/${state.player.maxHp}</strong></div><div><span>Lives</span><strong>${state.lives}/3</strong></div><div><span>Cells</span><strong>∞</strong></div><div><span>Boss</span><strong>${state.bossStarted ? (state.stage === 2 ? "tank" : state.stage === 3 ? "machine" : state.stage === 4 ? "cannon" : state.stage === 5 ? "warship" : state.bossPhase) : "Ahead"}</strong></div><div><span>Tip</span><strong>${state.message}</strong></div>`;
+        hudRef.current.innerHTML = `<div><span>Stage</span><strong>${state.stage}/${STAGE_MAX}</strong></div><div><span>Suit</span><strong>${Math.round(state.player.hp)}/${state.player.maxHp}</strong></div><div><span>Lives</span><strong>${state.lives}/3</strong></div><div><span>Weapon</span><strong>${weaponName(weaponForStage(state.stage))}</strong></div><div><span>Boss</span><strong>${state.bossStarted ? (state.stage === 2 ? "tank" : state.stage === 3 ? "machine" : state.stage === 4 ? "cannon" : state.stage === 5 ? "warship" : state.bossPhase) : "Ahead"}</strong></div><div><span>Tip</span><strong>${state.message}</strong></div>`;
       }
     };
 
