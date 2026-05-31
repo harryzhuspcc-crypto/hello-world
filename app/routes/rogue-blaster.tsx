@@ -61,7 +61,7 @@ const MACHINE_SAFE_X = BOSS_X - 370;
 const MACHINE_SAFE_W = 175;
 
 const MUSIC_PATHS: Record<MusicKey, string> = {
-  stage15: "/music/rough-run/stage1-final.wav",
+  stage15: "/music/rough-run/stage1-final.mp3",
   stage2: "/music/rough-run/stage2.wav",
   stage3: "/music/rough-run/stage3.wav",
   stage4: "/music/rough-run/stage4.wav",
