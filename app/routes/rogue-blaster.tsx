@@ -35,6 +35,14 @@ type MachineBoss = { x: number; hp: number; maxHp: number; active: boolean; flas
 type CannonBoss = { x: number; hp: number; maxHp: number; active: boolean; flash: number; shotTimer: number; chargeTimer: number; laserTimer: number };
 type SpaceshipBoss = { x: number; y: number; hp: number; maxHp: number; active: boolean; flash: number; shotTimer: number; phase: "pass" | "retreat" | "dead" };
 type FinalRobot = { x: number; hp: number; maxHp: number; active: boolean; flash: number; hitTimer: number; dir: -1 | 1; duckTimer: number };
+type MusicKey = "stage15" | "stage2" | "stage3" | "stage4" | "boss";
+
+type MusicTrack = {
+  tempo: number;
+  bass: number[];
+  lead: number[];
+  arp: number[];
+};
 
 const GROUND_Y = 500;
 const WORLD_W = 5200;
@@ -58,6 +66,39 @@ const FINAL_ARENA_RIGHT = 940;
 const FINAL_ROBOT_EDGE_PAD = 135;
 const MACHINE_SAFE_X = BOSS_X - 370;
 const MACHINE_SAFE_W = 175;
+
+const MUSIC_TRACKS: Record<MusicKey, MusicTrack> = {
+  stage15: {
+    tempo: 154,
+    bass: [40, 40, 47, 40, 43, 43, 47, 43, 38, 38, 45, 38, 40, 40, 47, 52],
+    lead: [64, -1, 67, 69, 71, -1, 69, 67, 64, 62, 64, -1, 67, 69, 74, 71],
+    arp: [52, 55, 59, 64, 52, 55, 59, 64, 50, 53, 57, 62, 48, 52, 55, 60],
+  },
+  stage2: {
+    tempo: 148,
+    bass: [36, 36, 43, 36, 39, 39, 46, 39, 41, 41, 48, 41, 39, 39, 46, 39],
+    lead: [67, 70, -1, 67, 72, -1, 70, 67, 65, 67, 70, 72, 74, -1, 72, 70],
+    arp: [48, 51, 55, 60, 51, 55, 60, 63, 53, 56, 60, 65, 51, 55, 58, 63],
+  },
+  stage3: {
+    tempo: 142,
+    bass: [35, 35, 42, 35, 34, 34, 41, 34, 37, 37, 44, 37, 34, 34, 41, 34],
+    lead: [62, -1, 65, -1, 66, 65, 62, -1, 58, -1, 62, 63, 65, -1, 63, 62],
+    arp: [47, 50, 54, 59, 46, 49, 53, 58, 49, 52, 56, 61, 46, 49, 53, 58],
+  },
+  stage4: {
+    tempo: 160,
+    bass: [38, 38, 45, 50, 38, 38, 45, 50, 41, 41, 48, 53, 43, 43, 50, 55],
+    lead: [69, 71, 72, -1, 76, 74, 72, 71, 69, 71, 74, -1, 77, 76, 74, 72],
+    arp: [50, 53, 57, 62, 50, 53, 57, 62, 53, 57, 60, 65, 55, 59, 62, 67],
+  },
+  boss: {
+    tempo: 176,
+    bass: [36, 43, 36, 46, 36, 43, 36, 48, 35, 42, 35, 45, 35, 42, 35, 47],
+    lead: [72, -1, 72, 75, 74, -1, 72, 70, 69, -1, 69, 72, 71, -1, 69, 67],
+    arp: [48, 55, 60, 63, 48, 55, 60, 63, 47, 54, 59, 62, 47, 54, 59, 62],
+  },
+};
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -236,7 +277,89 @@ export default function RogueBlaster() {
     resize();
     window.addEventListener("resize", resize);
 
+    let audioCtx: AudioContext | null = null;
+    let musicGain: GainNode | null = null;
+    let musicStep = 0;
+    let musicNextTime = 0;
+    let musicKey: MusicKey | null = null;
+
+    const midiToHz = (note: number) => 440 * 2 ** ((note - 69) / 12);
+
+    const ensureAudio = () => {
+      if (!audioCtx) {
+        audioCtx = new AudioContext();
+        musicGain = audioCtx.createGain();
+        musicGain.gain.value = 0.16;
+        musicGain.connect(audioCtx.destination);
+      }
+      if (audioCtx.state === "suspended") void audioCtx.resume();
+    };
+
+    const playOsc = (note: number, time: number, dur: number, type: OscillatorType, gainValue: number) => {
+      if (!audioCtx || !musicGain || note < 0) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(midiToHz(note), time);
+      gain.gain.setValueAtTime(0.0001, time);
+      gain.gain.exponentialRampToValueAtTime(gainValue, time + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+      osc.connect(gain).connect(musicGain);
+      osc.start(time);
+      osc.stop(time + dur + 0.02);
+    };
+
+    const playNoise = (time: number, dur: number, gainValue: number) => {
+      if (!audioCtx || !musicGain) return;
+      const buffer = audioCtx.createBuffer(1, Math.max(1, Math.floor(audioCtx.sampleRate * dur)), audioCtx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i += 1) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+      const src = audioCtx.createBufferSource();
+      const gain = audioCtx.createGain();
+      src.buffer = buffer;
+      gain.gain.setValueAtTime(gainValue, time);
+      gain.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+      src.connect(gain).connect(musicGain);
+      src.start(time);
+    };
+
+    const desiredMusicKey = (): MusicKey => {
+      if (state.bossStarted || state.finalArena) return "boss";
+      if (state.stage === 2) return "stage2";
+      if (state.stage === 3) return "stage3";
+      if (state.stage === 4) return "stage4";
+      return "stage15";
+    };
+
+    const updateMusic = () => {
+      if (!audioCtx || !musicGain) return;
+      if (!state.started || state.gameOver || state.won) {
+        musicGain.gain.setTargetAtTime(0.0001, audioCtx.currentTime, 0.08);
+        return;
+      }
+      musicGain.gain.setTargetAtTime(0.16, audioCtx.currentTime, 0.08);
+      const nextKey = desiredMusicKey();
+      if (musicKey !== nextKey) {
+        musicKey = nextKey;
+        musicStep = 0;
+        musicNextTime = audioCtx.currentTime + 0.04;
+      }
+      const track = MUSIC_TRACKS[musicKey];
+      const stepDur = 60 / track.tempo / 4;
+      while (musicNextTime < audioCtx.currentTime + 0.14) {
+        const i = musicStep % 16;
+        playOsc(track.bass[i], musicNextTime, stepDur * 0.85, "square", 0.12);
+        playOsc(track.arp[i], musicNextTime + stepDur * 0.45, stepDur * 0.42, "triangle", 0.055);
+        if (track.lead[i] >= 0) playOsc(track.lead[i], musicNextTime, stepDur * (i % 4 === 3 ? 1.7 : 0.9), "sawtooth", 0.05);
+        if (i % 4 === 0) playOsc(31, musicNextTime, 0.09, "sine", 0.18);
+        if (i % 4 === 2) playNoise(musicNextTime, 0.055, 0.035);
+        musicStep += 1;
+        musicNextTime += stepDur;
+      }
+    };
+
     const reset = () => {
+      ensureAudio();
       state.stage = 1;
       state.player = { x: 90, y: GROUND_Y - PLAYER_H, vy: 0, hp: 100, maxHp: 100, facing: 1, duck: false, cooldown: 0, invuln: 0, ammo: 36, maxAmmo: 36, reload: 0 };
       state.robots = makeRobots();
@@ -1656,6 +1779,7 @@ export default function RogueBlaster() {
       const dt = Math.min(0.04, (now - state.last) / 1000 || 0.016);
       state.last = now;
       update(dt);
+      updateMusic();
       draw();
       raf = requestAnimationFrame(tick);
     };
@@ -1667,6 +1791,7 @@ export default function RogueBlaster() {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("pointerdown", onPointerDown);
+      if (audioCtx) void audioCtx.close();
     };
   }, []);
 
