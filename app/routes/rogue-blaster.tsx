@@ -61,11 +61,11 @@ const MACHINE_SAFE_X = BOSS_X - 370;
 const MACHINE_SAFE_W = 175;
 
 const MUSIC_PATHS: Record<MusicKey, string> = {
-  stage15: "/music/rough-run/stage1-final.vgm",
-  stage2: "/music/rough-run/stage2.vgm",
-  stage3: "/music/rough-run/stage3.vgm",
-  stage4: "/music/rough-run/stage4.vgm",
-  boss: "/music/rough-run/boss.vgm",
+  stage15: "/music/rough-run/stage1-final.wav",
+  stage2: "/music/rough-run/stage2.wav",
+  stage3: "/music/rough-run/stage3.wav",
+  stage4: "/music/rough-run/stage4.wav",
+  boss: "/music/rough-run/boss.wav",
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -245,116 +245,27 @@ export default function RogueBlaster() {
     resize();
     window.addEventListener("resize", resize);
 
-    let audioCtx: AudioContext | null = null;
-    let musicGain: GainNode | null = null;
-    let musicSource: AudioBufferSourceNode | null = null;
+    const musicEls = new Map<MusicKey, HTMLAudioElement>();
     let musicKey: MusicKey | null = null;
-    let loadingMusicKey: MusicKey | null = null;
-    const musicCache = new Map<MusicKey, AudioBuffer>();
+    let currentMusic: HTMLAudioElement | null = null;
 
-    const ensureAudio = () => {
-      if (!audioCtx) {
-        audioCtx = new AudioContext();
-        musicGain = audioCtx.createGain();
-        musicGain.gain.value = 0.24;
-        musicGain.connect(audioCtx.destination);
+    const getMusicEl = (key: MusicKey) => {
+      let el = musicEls.get(key);
+      if (!el) {
+        el = new Audio(MUSIC_PATHS[key]);
+        el.loop = true;
+        el.preload = "auto";
+        el.volume = 0.72;
+        musicEls.set(key, el);
       }
-      if (audioCtx.state === "suspended") void audioCtx.resume();
+      return el;
     };
 
-    const readU32 = (data: Uint8Array, offset: number) =>
-      (data[offset] ?? 0) | ((data[offset + 1] ?? 0) << 8) | ((data[offset + 2] ?? 0) << 16) | ((data[offset + 3] ?? 0) << 24);
-
-    const renderNesVgm = (bytes: ArrayBuffer, ctxForBuffer: AudioContext) => {
-      const data = new Uint8Array(bytes);
-      const sampleRate = ctxForBuffer.sampleRate;
-      const totalSamples = Math.max(sampleRate * 18, Math.min(sampleRate * 210, readU32(data, 0x18) || sampleRate * 90));
-      const pcm = new Float32Array(totalSamples);
-      const cpu = 1789773;
-      const noisePeriods = [4, 8, 16, 32, 64, 96, 128, 160, 202, 254, 380, 508, 762, 1016, 2034, 4068];
-      const pulse = [
-        { en: false, duty: 0.125, vol: 0, timer: 0, phase: 0 },
-        { en: false, duty: 0.125, vol: 0, timer: 0, phase: 0 },
-      ];
-      const tri = { en: false, timer: 0, phase: 0, on: false };
-      const noise = { en: false, vol: 0, timer: 4, phase: 0, lfsr: 1 };
-      let writeHead = 0;
-      const renderWait = (samples: number) => {
-        const end = Math.min(totalSamples, writeHead + samples);
-        for (; writeHead < end; writeHead += 1) {
-          let mix = 0;
-          for (const pch of pulse) {
-            if (pch.en && pch.vol > 0 && pch.timer > 7) {
-              const freq = cpu / (16 * (pch.timer + 1));
-              pch.phase = (pch.phase + freq / sampleRate) % 1;
-              mix += (pch.phase < pch.duty ? 1 : -1) * pch.vol * 0.11;
-            }
-          }
-          if (tri.en && tri.on && tri.timer > 1) {
-            const freq = cpu / (32 * (tri.timer + 1));
-            tri.phase = (tri.phase + freq / sampleRate) % 1;
-            mix += (Math.abs(tri.phase * 2 - 1) * 2 - 1) * 0.13;
-          }
-          if (noise.en && noise.vol > 0) {
-            const freq = cpu / (16 * noise.timer);
-            noise.phase += freq / sampleRate;
-            while (noise.phase >= 1) {
-              const bit = (noise.lfsr ^ (noise.lfsr >> 1)) & 1;
-              noise.lfsr = (noise.lfsr >> 1) | (bit << 14);
-              noise.phase -= 1;
-            }
-            mix += (noise.lfsr & 1 ? 1 : -1) * noise.vol * 0.055;
-          }
-          pcm[writeHead] = clamp(mix, -0.95, 0.95);
-        }
-      };
-      const writeApu = (addr: number, value: number) => {
-        if (addr >= 0x00 && addr <= 0x03) {
-          const pch = pulse[0];
-          if (addr === 0x00) {
-            pch.duty = [0.125, 0.25, 0.5, 0.75][value >> 6] ?? 0.125;
-            pch.vol = (value & 0x10 ? value & 0x0f : value & 0x0f) / 15;
-          } else if (addr === 0x02) pch.timer = (pch.timer & 0x700) | value;
-          else if (addr === 0x03) pch.timer = ((value & 7) << 8) | (pch.timer & 0xff);
-        } else if (addr >= 0x04 && addr <= 0x07) {
-          const pch = pulse[1];
-          if (addr === 0x04) {
-            pch.duty = [0.125, 0.25, 0.5, 0.75][value >> 6] ?? 0.125;
-            pch.vol = (value & 0x10 ? value & 0x0f : value & 0x0f) / 15;
-          } else if (addr === 0x06) pch.timer = (pch.timer & 0x700) | value;
-          else if (addr === 0x07) pch.timer = ((value & 7) << 8) | (pch.timer & 0xff);
-        } else if (addr >= 0x08 && addr <= 0x0b) {
-          if (addr === 0x08) tri.on = (value & 0x7f) > 0;
-          else if (addr === 0x0a) tri.timer = (tri.timer & 0x700) | value;
-          else if (addr === 0x0b) tri.timer = ((value & 7) << 8) | (tri.timer & 0xff);
-        } else if (addr >= 0x0c && addr <= 0x0f) {
-          if (addr === 0x0c) noise.vol = (value & 0x0f) / 15;
-          else if (addr === 0x0e) noise.timer = noisePeriods[value & 0x0f] ?? 4;
-        } else if (addr === 0x15) {
-          pulse[0].en = !!(value & 1);
-          pulse[1].en = !!(value & 2);
-          tri.en = !!(value & 4);
-          noise.en = !!(value & 8);
-        }
-      };
-      let i = (readU32(data, 0x34) ? readU32(data, 0x34) + 0x34 : 0x40);
-      while (i < data.length && writeHead < totalSamples) {
-        const cmd = data[i++];
-        if (cmd === 0x66) break;
-        if (cmd === 0x61) { renderWait((data[i] ?? 0) | ((data[i + 1] ?? 0) << 8)); i += 2; }
-        else if (cmd === 0x62) renderWait(735);
-        else if (cmd === 0x63) renderWait(882);
-        else if (cmd >= 0x70 && cmd <= 0x7f) renderWait((cmd & 0x0f) + 1);
-        else if (cmd === 0xb4) { writeApu(data[i] ?? 0, data[i + 1] ?? 0); i += 2; }
-        else if (cmd === 0x67 && data[i] === 0x66) { i += 2; const size = readU32(data, i); i += 4 + size; }
-        else if (cmd >= 0x30 && cmd <= 0x4f) i += 1;
-        else if ((cmd >= 0x50 && cmd <= 0x5f) || (cmd >= 0xa0 && cmd <= 0xbf)) i += 2;
-        else if (cmd >= 0xc0 && cmd <= 0xdf) i += 3;
-        else if (cmd >= 0xe0) i += 4;
+    const ensureAudio = () => {
+      for (const key of Object.keys(MUSIC_PATHS) as MusicKey[]) {
+        const el = getMusicEl(key);
+        void el.load();
       }
-      const buffer = ctxForBuffer.createBuffer(1, Math.max(1, writeHead), sampleRate);
-      buffer.copyToChannel(pcm.subarray(0, writeHead), 0);
-      return buffer;
     };
 
     const desiredMusicKey = (): MusicKey => {
@@ -365,35 +276,28 @@ export default function RogueBlaster() {
       return "stage15";
     };
 
-    const startMusic = async (key: MusicKey) => {
-      if (!audioCtx || !musicGain || loadingMusicKey === key) return;
-      loadingMusicKey = key;
-      let buffer = musicCache.get(key);
-      if (!buffer) {
-        const response = await fetch(MUSIC_PATHS[key]);
-        buffer = renderNesVgm(await response.arrayBuffer(), audioCtx);
-        musicCache.set(key, buffer);
-      }
-      loadingMusicKey = null;
-      if (!audioCtx || !musicGain || desiredMusicKey() !== key || !state.started || state.gameOver || state.won) return;
-      musicSource?.stop();
-      musicSource = audioCtx.createBufferSource();
-      musicSource.buffer = buffer;
-      musicSource.loop = true;
-      musicSource.connect(musicGain);
-      musicSource.start();
-      musicKey = key;
-    };
-
     const updateMusic = () => {
-      if (!audioCtx || !musicGain) return;
       if (!state.started || state.gameOver || state.won) {
-        musicGain.gain.setTargetAtTime(0.0001, audioCtx.currentTime, 0.08);
+        currentMusic?.pause();
         return;
       }
-      musicGain.gain.setTargetAtTime(0.24, audioCtx.currentTime, 0.08);
       const nextKey = desiredMusicKey();
-      if (musicKey !== nextKey || !musicSource) void startMusic(nextKey);
+      if (musicKey !== nextKey || !currentMusic) {
+        currentMusic?.pause();
+        currentMusic = getMusicEl(nextKey);
+        currentMusic.currentTime = 0;
+        currentMusic.volume = 0.72;
+        const playPromise = currentMusic.play();
+        if (playPromise) void playPromise.catch(() => {
+          state.message = "Click or press Space once more to enable music.";
+        });
+        musicKey = nextKey;
+      } else if (currentMusic.paused) {
+        const playPromise = currentMusic.play();
+        if (playPromise) void playPromise.catch(() => {
+          state.message = "Click or press Space once more to enable music.";
+        });
+      }
     };
 
     const reset = () => {
@@ -438,6 +342,7 @@ export default function RogueBlaster() {
         { ox: 88, oy: 42, hp: 7, maxHp: 7, dead: false, flash: 0, cooldown: 1.6 },
       ];
       state.message = "Go forward. Duck to shoot ground mines. Shoot boss cannons while dodging.";
+      updateMusic();
     };
 
     const startStage2 = () => {
@@ -562,6 +467,7 @@ export default function RogueBlaster() {
 
     const onKeyDown = (event: KeyboardEvent) => {
       keys.add(event.code);
+      ensureAudio();
       if (event.code === "Space" || event.code === "KeyF") {
         event.preventDefault();
         if (!state.started || state.gameOver || state.won) reset();
@@ -577,11 +483,14 @@ export default function RogueBlaster() {
         state.player.vy = -660;
       }
       if (event.code === "Enter" && (!state.started || state.gameOver || state.won)) reset();
+      updateMusic();
     };
     const onKeyUp = (event: KeyboardEvent) => keys.delete(event.code);
     const onPointerDown = () => {
+      ensureAudio();
       if (!state.started || state.gameOver || state.won) reset();
       else shoot();
+      updateMusic();
     };
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
@@ -1829,7 +1738,7 @@ export default function RogueBlaster() {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("pointerdown", onPointerDown);
-      if (audioCtx) void audioCtx.close();
+      currentMusic?.pause();
     };
   }, []);
 
