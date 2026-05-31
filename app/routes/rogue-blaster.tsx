@@ -255,6 +255,7 @@ export default function RogueBlaster() {
     let musicKey: MusicKey | null = null;
     let currentMusic: HTMLAudioElement | null = null;
     let jinglePlaying = false;
+    let audioPrepared = false;
 
     const getMusicEl = (key: MusicKey) => {
       let el = musicEls.get(key);
@@ -281,6 +282,8 @@ export default function RogueBlaster() {
     };
 
     const ensureAudio = () => {
+      if (audioPrepared) return;
+      audioPrepared = true;
       for (const key of Object.keys(MUSIC_PATHS) as MusicKey[]) {
         const el = getMusicEl(key);
         void el.load();
