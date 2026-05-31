@@ -62,10 +62,15 @@ const MACHINE_SAFE_W = 175;
 
 const MUSIC_PATHS: Record<MusicKey, string> = {
   stage15: "/music/rough-run/stage1-final.mp3",
-  stage2: "/music/rough-run/stage2.wav",
-  stage3: "/music/rough-run/stage3.wav",
-  stage4: "/music/rough-run/stage4.wav",
-  boss: "/music/rough-run/boss.wav",
+  stage2: "/music/rough-run/stage2.mp3",
+  stage3: "/music/rough-run/stage3.mp3",
+  stage4: "/music/rough-run/stage4.mp3",
+  boss: "/music/rough-run/boss.mp3",
+};
+
+const JINGLE_PATHS = {
+  stageClear: "/music/rough-run/stage-clear.mp3",
+  gameOver: "/music/rough-run/game-over.mp3",
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -246,8 +251,10 @@ export default function RogueBlaster() {
     window.addEventListener("resize", resize);
 
     const musicEls = new Map<MusicKey, HTMLAudioElement>();
+    const jingleEls = new Map<keyof typeof JINGLE_PATHS, HTMLAudioElement>();
     let musicKey: MusicKey | null = null;
     let currentMusic: HTMLAudioElement | null = null;
+    let jinglePlaying = false;
 
     const getMusicEl = (key: MusicKey) => {
       let el = musicEls.get(key);
@@ -261,9 +268,25 @@ export default function RogueBlaster() {
       return el;
     };
 
+    const getJingleEl = (key: keyof typeof JINGLE_PATHS) => {
+      let el = jingleEls.get(key);
+      if (!el) {
+        el = new Audio(JINGLE_PATHS[key]);
+        el.loop = false;
+        el.preload = "auto";
+        el.volume = 0.78;
+        jingleEls.set(key, el);
+      }
+      return el;
+    };
+
     const ensureAudio = () => {
       for (const key of Object.keys(MUSIC_PATHS) as MusicKey[]) {
         const el = getMusicEl(key);
+        void el.load();
+      }
+      for (const key of Object.keys(JINGLE_PATHS) as (keyof typeof JINGLE_PATHS)[]) {
+        const el = getJingleEl(key);
         void el.load();
       }
     };
@@ -276,7 +299,26 @@ export default function RogueBlaster() {
       return "stage15";
     };
 
+    const playJingle = (key: keyof typeof JINGLE_PATHS) => {
+      ensureAudio();
+      currentMusic?.pause();
+      jinglePlaying = true;
+      const el = getJingleEl(key);
+      el.currentTime = 0;
+      el.onended = () => {
+        jinglePlaying = false;
+        musicKey = null;
+        currentMusic = null;
+        updateMusic();
+      };
+      const playPromise = el.play();
+      if (playPromise) void playPromise.catch(() => {
+        jinglePlaying = false;
+      });
+    };
+
     const updateMusic = () => {
+      if (jinglePlaying) return;
       if (!state.started || state.gameOver || state.won) {
         currentMusic?.pause();
         return;
@@ -302,6 +344,8 @@ export default function RogueBlaster() {
 
     const reset = () => {
       ensureAudio();
+      jinglePlaying = false;
+      for (const el of jingleEls.values()) el.pause();
       state.stage = 1;
       state.player = { x: 90, y: GROUND_Y - PLAYER_H, vy: 0, hp: 100, maxHp: 100, facing: 1, duck: false, cooldown: 0, invuln: 0, ammo: 36, maxAmmo: 36, reload: 0 };
       state.robots = makeRobots();
@@ -439,6 +483,7 @@ export default function RogueBlaster() {
       if (state.lives <= 0) {
         state.player.hp = 0;
         state.gameOver = true;
+        playJingle("gameOver");
         state.message = "No lives left! Press R or click to restart from Stage 1.";
         return;
       }
@@ -579,6 +624,7 @@ export default function RogueBlaster() {
           state.score += 8000;
           state.message = "Stage 1 complete — entering the robot lab!";
           burst(state.particles, heli.x, heli.y, "#fde047", 80);
+          playJingle("stageClear");
           startStage2();
         }
       }
@@ -809,6 +855,7 @@ export default function RogueBlaster() {
             bot.hitTimer = 0.6;
           }
         } else {
+          playJingle("stageClear");
           state.won = true;
           state.message = "Stage 5 clear — mission complete!";
         }
@@ -875,10 +922,12 @@ export default function RogueBlaster() {
       if (state.stage === 3 && state.bossStarted && state.machineBoss.hp <= 0) {
         state.score += 12000;
         state.message = "Machine boss destroyed — Stage 4 begins!";
+        playJingle("stageClear");
         startStage4();
       } else if (state.stage === 4 && state.bossStarted && state.cannonBoss.hp <= 0) {
         state.score += 14000;
         state.message = "Cannon boss destroyed — Stage 5 begins!";
+        playJingle("stageClear");
         startStage5();
       }
     };
@@ -1165,6 +1214,7 @@ export default function RogueBlaster() {
               state.score += 10000;
               state.message = "Stage 2 tank defeated — going down to Stage 3!";
               burst(state.particles, tank.x, GROUND_Y - 55, "#fde047", 90);
+              playJingle("stageClear");
               startStage3();
             }
           }
