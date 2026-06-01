@@ -74,6 +74,14 @@ const JINGLE_PATHS = {
   gameOver: "/music/rough-run/game-over.mp3",
 };
 
+const MUSIC_LOOP_POINTS: Record<MusicKey, { start: number; end: number }> = {
+  stage15: { start: 10.998, end: 66.86 },
+  stage2: { start: 17.571, end: 221.98 },
+  stage3: { start: 0, end: 51.07 },
+  stage4: { start: 19.501, end: 70.56 },
+  boss: { start: 3.194, end: 41.48 },
+};
+
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
@@ -288,24 +296,15 @@ export default function RogueBlaster() {
     resize();
     window.addEventListener("resize", resize);
 
-    const musicEls = new Map<MusicKey, HTMLAudioElement>();
     const jingleEls = new Map<keyof typeof JINGLE_PATHS, HTMLAudioElement>();
+    const musicBuffers = new Map<MusicKey, AudioBuffer>();
+    let audioCtx: AudioContext | null = null;
+    let musicGain: GainNode | null = null;
+    let musicSource: AudioBufferSourceNode | null = null;
     let musicKey: MusicKey | null = null;
-    let currentMusic: HTMLAudioElement | null = null;
+    let loadingMusicKey: MusicKey | null = null;
     let jinglePlaying = false;
     let audioPrepared = false;
-
-    const getMusicEl = (key: MusicKey) => {
-      let el = musicEls.get(key);
-      if (!el) {
-        el = new Audio(MUSIC_PATHS[key]);
-        el.loop = true;
-        el.preload = "auto";
-        el.volume = 0.72;
-        musicEls.set(key, el);
-      }
-      return el;
-    };
 
     const getJingleEl = (key: keyof typeof JINGLE_PATHS) => {
       let el = jingleEls.get(key);
@@ -320,12 +319,15 @@ export default function RogueBlaster() {
     };
 
     const ensureAudio = () => {
+      if (!audioCtx) {
+        audioCtx = new AudioContext();
+        musicGain = audioCtx.createGain();
+        musicGain.gain.value = 0.72;
+        musicGain.connect(audioCtx.destination);
+      }
+      if (audioCtx.state === "suspended") void audioCtx.resume();
       if (audioPrepared) return;
       audioPrepared = true;
-      for (const key of Object.keys(MUSIC_PATHS) as MusicKey[]) {
-        const el = getMusicEl(key);
-        void el.load();
-      }
       for (const key of Object.keys(JINGLE_PATHS) as (keyof typeof JINGLE_PATHS)[]) {
         const el = getJingleEl(key);
         void el.load();
@@ -340,17 +342,47 @@ export default function RogueBlaster() {
       return "stage15";
     };
 
+    const stopMusic = () => {
+      try { musicSource?.stop(); } catch {}
+      musicSource?.disconnect();
+      musicSource = null;
+      musicKey = null;
+    };
+
+    const startMusic = async (key: MusicKey) => {
+      ensureAudio();
+      if (!audioCtx || !musicGain || loadingMusicKey === key) return;
+      loadingMusicKey = key;
+      let buffer = musicBuffers.get(key);
+      if (!buffer) {
+        const response = await fetch(MUSIC_PATHS[key]);
+        buffer = await audioCtx.decodeAudioData(await response.arrayBuffer());
+        musicBuffers.set(key, buffer);
+      }
+      loadingMusicKey = null;
+      if (!audioCtx || !musicGain || jinglePlaying || !state.started || state.gameOver || state.won || desiredMusicKey() !== key) return;
+      stopMusic();
+      const points = MUSIC_LOOP_POINTS[key];
+      const source = audioCtx.createBufferSource();
+      source.buffer = buffer;
+      source.loop = true;
+      source.loopStart = clamp(points.start, 0, Math.max(0, buffer.duration - 0.2));
+      source.loopEnd = clamp(points.end, source.loopStart + 0.5, buffer.duration - 0.02);
+      source.connect(musicGain);
+      source.start(0, 0);
+      musicSource = source;
+      musicKey = key;
+    };
+
     const playJingle = (key: keyof typeof JINGLE_PATHS, onDone?: () => void) => {
       ensureAudio();
-      currentMusic?.pause();
+      stopMusic();
       jinglePlaying = true;
       const el = getJingleEl(key);
       el.currentTime = 0;
       el.onended = () => {
         jinglePlaying = false;
         onDone?.();
-        musicKey = null;
-        currentMusic = null;
         updateMusic();
       };
       const playPromise = el.play();
@@ -374,30 +406,11 @@ export default function RogueBlaster() {
     const updateMusic = () => {
       if (jinglePlaying) return;
       if (!state.started || state.gameOver || state.won) {
-        currentMusic?.pause();
+        stopMusic();
         return;
       }
-      if (currentMusic && Number.isFinite(currentMusic.duration) && currentMusic.duration > 1 && currentMusic.duration - currentMusic.currentTime < 0.08) {
-        currentMusic.currentTime = 0;
-        void currentMusic.play().catch(() => undefined);
-      }
       const nextKey = desiredMusicKey();
-      if (musicKey !== nextKey || !currentMusic) {
-        currentMusic?.pause();
-        currentMusic = getMusicEl(nextKey);
-        currentMusic.currentTime = 0;
-        currentMusic.volume = 0.72;
-        const playPromise = currentMusic.play();
-        if (playPromise) void playPromise.catch(() => {
-          state.message = "Click or press Space once more to enable music.";
-        });
-        musicKey = nextKey;
-      } else if (currentMusic.paused) {
-        const playPromise = currentMusic.play();
-        if (playPromise) void playPromise.catch(() => {
-          state.message = "Click or press Space once more to enable music.";
-        });
-      }
+      if (musicKey !== nextKey || !musicSource) void startMusic(nextKey);
     };
 
     const reset = () => {
@@ -2015,7 +2028,8 @@ export default function RogueBlaster() {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("pointerdown", onPointerDown);
-      currentMusic?.pause();
+      stopMusic();
+      if (audioCtx) void audioCtx.close();
     };
   }, []);
 
