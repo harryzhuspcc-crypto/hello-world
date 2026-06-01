@@ -377,6 +377,10 @@ export default function RogueBlaster() {
         currentMusic?.pause();
         return;
       }
+      if (currentMusic && Number.isFinite(currentMusic.duration) && currentMusic.duration > 1 && currentMusic.duration - currentMusic.currentTime < 0.08) {
+        currentMusic.currentTime = 0;
+        void currentMusic.play().catch(() => undefined);
+      }
       const nextKey = desiredMusicKey();
       if (musicKey !== nextKey || !currentMusic) {
         currentMusic?.pause();
