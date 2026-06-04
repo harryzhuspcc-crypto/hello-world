@@ -1991,19 +1991,107 @@ export default function RogueBlaster() {
         ctx.fillText("Stage clear music is playing — next stage starts when it ends.", w / 2, h / 2 + 78);
       }
 
-      if (!state.started || state.gameOver || state.won) {
+      if (!state.started) {
+        const t = performance.now() / 1000;
+        ctx.fillStyle = "rgba(2,6,23,0.86)";
+        ctx.fillRect(0, 0, w, h);
+        const titleGlow = 0.5 + Math.sin(t * 2.8) * 0.5;
+        ctx.fillStyle = `rgba(34,211,238,${0.12 + titleGlow * 0.1})`;
+        for (let i = 0; i < 9; i += 1) {
+          ctx.beginPath();
+          ctx.arc(w / 2, h / 2 - 70, 120 + i * 40 + Math.sin(t + i) * 8, 0, Math.PI * 2);
+          ctx.strokeStyle = i % 2 ? "rgba(253,224,71,0.28)" : "rgba(34,211,238,0.28)";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+        ctx.save();
+        ctx.translate(w / 2, h / 2 - 18);
+        ctx.fillStyle = "rgba(34,211,238,0.18)";
+        ctx.fillRect(-360, -210, 720, 330);
+        ctx.strokeStyle = "rgba(103,232,249,0.5)";
+        ctx.lineWidth = 3;
+        ctx.strokeRect(-360, -210, 720, 330);
+        ctx.fillStyle = "rgba(15,23,42,0.95)";
+        ctx.fillRect(-330, -180, 660, 270);
+        ctx.fillStyle = "#22d3ee";
+        for (let x = -300; x <= 300; x += 60) ctx.fillRect(x, 64 + Math.sin(t * 3 + x) * 3, 34, 6);
+        ctx.save();
+        ctx.translate(-220, 22 + Math.sin(t * 4) * 4);
+        ctx.scale(1.35, 1.35);
+        ctx.fillStyle = "#e2e8f0";
+        ctx.fillRect(-15, -42, 30, 64);
+        ctx.fillStyle = "#38bdf8";
+        ctx.fillRect(-10, -34, 20, 12);
+        ctx.fillStyle = "#cbd5e1";
+        ctx.beginPath();
+        ctx.arc(0, -62, 17, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "rgba(14,165,233,0.75)";
+        ctx.beginPath();
+        ctx.ellipse(4, -62, 11, 8, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#67e8f9";
+        ctx.fillRect(10, -30, 64, 12);
+        ctx.fillStyle = "#facc15";
+        ctx.fillRect(72, -27, 18 + Math.sin(t * 16) * 5, 6);
+        ctx.restore();
+        ctx.save();
+        ctx.translate(235, 44);
+        ctx.scale(1.25, 1.25);
+        ctx.fillStyle = "#22d3ee";
+        ctx.fillRect(-42, -92, 84, 76);
+        ctx.fillStyle = "#020617";
+        ctx.fillRect(-34, -118, 68, 32);
+        ctx.fillStyle = "#67e8f9";
+        ctx.fillRect(-24, -105, 12, 7);
+        ctx.fillRect(12, -105, 12, 7);
+        ctx.fillStyle = "#334155";
+        ctx.fillRect(-56, -16, 32, 12);
+        ctx.fillRect(24, -16, 32, 12);
+        ctx.strokeStyle = "#fde047";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(-24, -118);
+        ctx.lineTo(-42, -150);
+        ctx.moveTo(24, -118);
+        ctx.lineTo(42, -150);
+        ctx.stroke();
+        ctx.restore();
+        ctx.restore();
+        ctx.textAlign = "center";
+        ctx.shadowColor = "#22d3ee";
+        ctx.shadowBlur = 26;
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "900 70px Inter, sans-serif";
+        ctx.fillText("ROGUE BLASTER", w / 2, h / 2 - 178);
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = "#fde047";
+        ctx.font = "900 22px Inter, sans-serif";
+        ctx.fillText("FIVE-STAGE ROBOT CAMPAIGN", w / 2, h / 2 - 134);
+        ctx.fillStyle = "#cbd5e1";
+        ctx.font = "800 17px Inter, sans-serif";
+        ctx.fillText("Destroy the helicopter, lab tank, machine core, cannon, warship, and final robot.", w / 2, h / 2 + 112);
+        ctx.fillStyle = "#e0f2fe";
+        ctx.font = "900 16px Inter, sans-serif";
+        ctx.fillText("A/D move • W/↑ jump • S/↓ duck • Space/F shoot • Enter gun select • Shift cycle guns", w / 2, h / 2 + 146);
+        if (Math.sin(t * 5) > -0.35) {
+          ctx.fillStyle = "#67e8f9";
+          ctx.font = "900 24px Inter, sans-serif";
+          ctx.fillText("PRESS ENTER, SPACE, OR CLICK TO START", w / 2, h / 2 + 198);
+        }
+      } else if (state.gameOver || state.won) {
         ctx.fillStyle = "rgba(2,6,23,0.78)";
         ctx.fillRect(0, 0, w, h);
         ctx.textAlign = "center";
         ctx.fillStyle = "white";
         ctx.font = "900 50px Inter, sans-serif";
-        ctx.fillText(state.won ? "Mission Complete!" : state.gameOver ? "Mission Failed" : "Rough Run: Robot Silius", w / 2, h / 2 - 72);
+        ctx.fillText(state.won ? "Mission Complete!" : "Mission Failed", w / 2, h / 2 - 72);
         ctx.fillStyle = "#fde68a";
         ctx.font = "900 19px Inter, sans-serif";
-        ctx.fillText(state.won || state.gameOver ? `Score ${state.score.toLocaleString()} • Robots ${state.kills}` : "Clear five stages: helicopter, lab tank, machine, cannon, then spaceship and final robot", w / 2, h / 2 - 24);
+        ctx.fillText(`Score ${state.score.toLocaleString()} • Robots ${state.kills}`, w / 2, h / 2 - 24);
         ctx.fillStyle = "#cbd5e1";
         ctx.font = "800 16px Inter, sans-serif";
-        ctx.fillText("A/D move • W/↑ jump • S/↓ duck • Space/F shoot • Infinite bullets", w / 2, h / 2 + 24);
+        ctx.fillText("Press Enter, R, Space, or click to restart from Stage 1", w / 2, h / 2 + 24);
       }
 
       if (hudRef.current) {
