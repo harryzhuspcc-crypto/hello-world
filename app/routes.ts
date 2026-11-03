@@ -11,4 +11,5 @@ export default [
   route("angry-bird", "routes/angry-bird.tsx"),
   route("tetras-duel", "routes/tetras-duel.tsx"),
   route("rogue-blaster", "routes/rogue-blaster.tsx"),
+  route("first-game", "routes/first-game.tsx"),
 ] satisfies RouteConfig;

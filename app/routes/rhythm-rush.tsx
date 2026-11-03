@@ -1,5 +1,5 @@
 import { Link } from "react-router";
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useRef } from "react";
 
 import type { Route } from "./+types/rhythm-rush";
 
@@ -11,8 +11,13 @@ export function meta({}: Route.MetaArgs) {
 }
 
 type Lane = 0 | 1 | 2 | 3;
-type Note = { lane: Lane; hitTime: number; holdTime: number; hit: boolean; missed: boolean; completed: boolean; holding: boolean; travelTime: number };
-type ChartItem = Lane | Lane[] | { lane: Lane; hold: number } | { chord: Lane[]; hold?: number };
+type Note = { lane: Lane; hitTime: number; holdTime: number; hit: boolean; missed: boolean; completed: boolean; holding: boolean; travelTime: number; pitch: number };
+type ChartItem = Lane | Lane[] | { lane: Lane; hold: number } | { chord: Lane[]; hold?: number } | null;
+type Bar = { time: number; bpm: number; chord: number; level: number };
+type Song = { notes: Note[]; bars: Bar[]; end: number };
+// pattern items sit on a beat grid (step beats apart, null = rest); hold lengths are in beats.
+// level drives the backing arrangement: -1 count-in, 0 pad only, 1 + drums and bass, 2 + arp, 3 full.
+type Section = { bpm: number; level: number; travel: number; step?: number; pattern: ChartItem[]; repeats: number; rest: number };
 
 const lanes = [
   { key: "z", label: "Z", name: "Z", color: "#38bdf8" },
@@ -21,95 +26,94 @@ const lanes = [
   { key: ".", label: ".", name: "PERIOD", color: "#fb7185" },
 ] as const;
 
-function createChart() {
-  const notes: Note[] = [];
-  let time = 1.25;
-  const add = (lane: Lane, hitTime: number, travelTime: number, holdTime = 0) => notes.push({ lane, hitTime, holdTime, travelTime, hit: false, missed: false, completed: false, holding: false });
-  const addChord = (chord: Lane[], hitTime: number, travelTime: number, holdTime = 0) => chord.forEach((lane) => add(lane, hitTime, travelTime, holdTime));
-  const sections: Array<{ interval: number; travel: number; pattern: ChartItem[]; repeats: number; rest: number }> = [
-    { interval: 1.05, travel: 3.0, pattern: [0, 1, 2, 3], repeats: 2, rest: 0.9 },
-    { interval: 0.88, travel: 2.8, pattern: [0, 1, 2, 3, 3, 2, 1, 0], repeats: 1, rest: 0.8 },
-    { interval: 0.74, travel: 2.55, pattern: [0, 2, { lane: 1, hold: 1.0 }, 3, 1, 2, 0, 3], repeats: 2, rest: 0.65 },
-    { interval: 0.64, travel: 2.35, pattern: [0, 1, { chord: [2, 3] }, 2, 3, { lane: 1, hold: 1.15 }, 0, 3], repeats: 2, rest: 0.55 },
-    { interval: 0.56, travel: 2.15, pattern: [0, { chord: [1, 3] }, 2, 0, { lane: 3, hold: 0.95 }, 1, { chord: [0, 2] }, 3], repeats: 2, rest: 0.45 },
-    { interval: 0.48, travel: 1.95, pattern: [{ chord: [0, 3] }, 1, 2, { lane: 0, hold: 0.82 }, 3, 1, { chord: [1, 3] }, 0], repeats: 2, rest: 0.35 },
-    { interval: 0.42, travel: 1.78, pattern: [0, 1, { chord: [2, 3] }, 2, { lane: 1, hold: 0.72 }, 3, 2, { chord: [0, 3] }, 1, 2], repeats: 2, rest: 0.3 },
-  ];
+// "Neon Drift": an A minor loop (Am – F – C – G), one chord per bar. Each lane plays a tone of the
+// current chord, so the falling notes are the song's melody and always sit inside the harmony.
+const progression = [
+  { bass: 45, pad: [57, 60, 64], lanes: [69, 72, 76, 81] },
+  { bass: 41, pad: [57, 60, 65], lanes: [69, 72, 77, 81] },
+  { bass: 48, pad: [55, 60, 64], lanes: [67, 72, 76, 79] },
+  { bass: 43, pad: [55, 59, 62], lanes: [67, 71, 74, 79] },
+];
+const midiToFreq = (midi: number) => 440 * 2 ** ((midi - 69) / 12);
 
-  for (const section of sections) {
-    for (let repeat = 0; repeat < section.repeats; repeat += 1) {
-      for (const item of section.pattern) {
-        if (Array.isArray(item)) addChord(item, time, section.travel);
-        else if (typeof item === "object" && "chord" in item) addChord(item.chord, time, section.travel, item.hold ?? 0);
-        else if (typeof item === "object") add(item.lane, time, section.travel, item.hold);
-        else add(item, time, section.travel);
-        time += section.interval;
-      }
-      time += section.rest;
+function appendSection(song: Song, section: Section) {
+  const beat = 60 / section.bpm;
+  const step = section.step ?? 1;
+  const start = song.end;
+  const firstBar = song.bars.length;
+  let position = 0;
+  const add = (lane: Lane, holdBeats = 0) => {
+    const chord = progression[(firstBar + Math.floor(position / 4)) % progression.length];
+    song.notes.push({ lane, hitTime: start + position * beat, holdTime: holdBeats * beat, travelTime: section.travel, pitch: chord.lanes[lane], hit: false, missed: false, completed: false, holding: false });
+  };
+  for (let repeat = 0; repeat < section.repeats; repeat += 1) {
+    for (const item of section.pattern) {
+      if (item === null) {
+        // rest
+      } else if (Array.isArray(item)) item.forEach((lane) => add(lane));
+      else if (typeof item === "object" && "chord" in item) item.chord.forEach((lane) => add(lane, item.hold ?? 0));
+      else if (typeof item === "object") add(item.lane, item.hold);
+      else add(item);
+      position += step;
     }
+    // Every phrase ends on a bar line so the chord changes stay in step with the notes.
+    position = Math.ceil((position + section.rest) / 4) * 4;
   }
-  return notes;
+  for (let bar = 0; bar < position / 4; bar += 1) {
+    song.bars.push({ time: start + bar * 4 * beat, bpm: section.bpm, chord: (firstBar + bar) % progression.length, level: section.level });
+  }
+  song.end = start + position * beat;
 }
 
-function createHardEndlessChunk(startTime: number, loop: number) {
-  const notes: Note[] = [];
-  let time = startTime;
-  const interval = Math.max(0.26, 0.42 - loop * 0.018);
-  const travel = Math.max(1.18, 1.78 - loop * 0.055);
-  const add = (lane: Lane, hitTime: number, holdTime = 0) => notes.push({ lane, hitTime, holdTime, travelTime: travel, hit: false, missed: false, completed: false, holding: false });
-  const addItem = (item: ChartItem) => {
-    if (Array.isArray(item)) item.forEach((lane) => add(lane, time));
-    else if (typeof item === "object" && "chord" in item) item.chord.forEach((lane) => add(lane, time, item.hold ?? 0));
-    else if (typeof item === "object") add(item.lane, time, item.hold);
-    else add(item, time);
-    time += interval;
-  };
+function createSong() {
+  const song: Song = { notes: [], bars: [], end: 0 };
+  const _ = null;
+  const sections: Section[] = [
+    { bpm: 96, level: -1, travel: 3.0, pattern: [_, _, _, _], repeats: 1, rest: 0 },
+    { bpm: 96, level: 0, travel: 3.0, step: 2, pattern: [0, 1, 2, 3], repeats: 2, rest: 4 },
+    { bpm: 104, level: 1, travel: 2.8, step: 2, pattern: [0, 1, 2, 3, 3, 2, 1, 0], repeats: 1, rest: 4 },
+    { bpm: 112, level: 1, travel: 2.55, pattern: [0, _, 2, _, { lane: 1, hold: 2 }, _, _, 3, _, 1, _, 2, 0, _, 3, _], repeats: 2, rest: 4 },
+    { bpm: 120, level: 2, travel: 2.35, pattern: [0, _, 1, { chord: [2, 3] }, _, 2, 3, _, { lane: 1, hold: 2 }, _, _, 0, _, 3, _, _], repeats: 2, rest: 4 },
+    { bpm: 128, level: 2, travel: 2.15, pattern: [0, { chord: [1, 3] }, _, 2, 0, _, { lane: 3, hold: 2 }, _, _, 1, { chord: [0, 2] }, _, 3, _, 2, _], repeats: 2, rest: 4 },
+    { bpm: 136, level: 3, travel: 1.95, pattern: [{ chord: [0, 3] }, 1, 2, _, { lane: 0, hold: 2 }, _, _, 3, 1, { chord: [1, 3] }, 0, _], repeats: 2, rest: 4 },
+    { bpm: 144, level: 3, travel: 1.78, pattern: [0, 1, { chord: [2, 3] }, 2, { lane: 1, hold: 2 }, _, _, 3, 2, { chord: [0, 3] }, 1, 2], repeats: 2, rest: 4 },
+  ];
+  sections.forEach((section) => appendSection(song, section));
+  return song;
+}
+
+function appendHardEndlessChunk(song: Song, loop: number) {
   const hardPatterns: ChartItem[][] = [
-    [0, 1, { chord: [2, 3] }, 2, { lane: 1, hold: 0.72 }, 3, 2, { chord: [0, 3] }, 1, 2],
-    [{ chord: [0, 3] }, 1, 2, { lane: 0, hold: 0.82 }, 3, 1, { chord: [1, 3] }, 0, 2, { chord: [0, 2] }],
-    [0, { chord: [1, 3] }, 2, { chord: [0, 2] }, 3, { lane: 2, hold: 0.64 }, 1, { chord: [0, 3] }, 2, 1],
+    [0, 1, { chord: [2, 3] }, 2, { lane: 1, hold: 2 }, null, 3, 2, { chord: [0, 3] }, 1, 2, null],
+    [{ chord: [0, 3] }, 1, 2, { lane: 0, hold: 2 }, null, 3, 1, { chord: [1, 3] }, 0, 2, { chord: [0, 2] }, null],
+    [0, { chord: [1, 3] }, 2, { chord: [0, 2] }, 3, { lane: 2, hold: 2 }, null, 1, { chord: [0, 3] }, 2, 1, null],
   ];
   const repeats = Math.min(5, 3 + Math.floor(loop / 2));
   for (let repeat = 0; repeat < repeats; repeat += 1) {
-    const pattern = hardPatterns[(loop + repeat) % hardPatterns.length];
-    for (const item of pattern) addItem(item);
-    time += Math.max(0.12, 0.3 - loop * 0.018);
+    appendSection(song, {
+      bpm: Math.min(176, 148 + loop * 4),
+      level: 3,
+      travel: Math.max(1.18, 1.78 - loop * 0.055),
+      pattern: hardPatterns[(loop + repeat) % hardPatterns.length],
+      repeats: 1,
+      rest: 0,
+    });
   }
-  return notes;
 }
 
 export default function RhythmRush() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const hudRef = useRef<HTMLDivElement | null>(null);
   const messageRef = useRef<HTMLDivElement | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [songName, setSongName] = useState("Original butterfly-style soundtrack");
-
-  const chooseCustomSong = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    const audio = audioRef.current;
-    if (!file || !audio) return;
-    const oldUrl = audio.dataset.objectUrl;
-    if (oldUrl) URL.revokeObjectURL(oldUrl);
-    const url = URL.createObjectURL(file);
-    audio.src = url;
-    audio.dataset.objectUrl = url;
-    audio.dataset.customSong = "yes";
-    audio.loop = true;
-    audio.volume = 0.72;
-    setSongName(file.name);
-  };
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const audio = audioRef.current;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
     const state = {
-      notes: createChart(),
+      song: createSong(),
       started: false,
       startedAt: performance.now(),
       score: 0,
@@ -125,13 +129,17 @@ export default function RhythmRush() {
       shake: 0,
       audioCtx: null as AudioContext | null,
       master: null as GainNode | null,
-      nextBeatGame: 0,
+      // Per-run bus, so a restart or game over can silence sounds already scheduled ahead.
+      mix: null as GainNode | null,
+      // Audio-clock time that equals game time 0; set once the context is running.
+      audioStart: 0,
+      audioReady: false,
+      run: 0,
+      nextBar: 0,
       nextNoteSoundIndex: 0,
-      beatIndex: 0,
       endlessLoops: 0,
     };
 
-    const hasCustomSong = () => Boolean(audio?.dataset.customSong === "yes" && audio.src);
     const currentGameTime = () => (performance.now() - state.startedAt) / 1000;
 
     const ensureAudio = () => {
@@ -147,27 +155,34 @@ export default function RhythmRush() {
       return audioCtx;
     };
 
-    const playTone = (frequency: number, start: number, duration: number, type: OscillatorType, volume: number) => {
+    const playTone = (frequency: number, start: number, duration: number, type: OscillatorType, volume: number, options: { attack?: number; cutoff?: number } = {}) => {
       const audioCtx = state.audioCtx;
-      const master = state.master;
-      if (!audioCtx || !master) return;
+      const out = state.mix;
+      if (!audioCtx || !out) return;
+      const attack = options.attack ?? 0.015;
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
       osc.type = type;
       osc.frequency.setValueAtTime(frequency, start);
       gain.gain.setValueAtTime(0.0001, start);
-      gain.gain.exponentialRampToValueAtTime(volume, start + 0.015);
-      gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+      gain.gain.exponentialRampToValueAtTime(volume, start + attack);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + Math.max(duration, attack + 0.02));
       osc.connect(gain);
-      gain.connect(master);
+      if (options.cutoff) {
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = "lowpass";
+        filter.frequency.value = options.cutoff;
+        gain.connect(filter);
+        filter.connect(out);
+      } else gain.connect(out);
       osc.start(start);
-      osc.stop(start + duration + 0.03);
+      osc.stop(start + duration + 0.05);
     };
 
-    const playNoise = (start: number, duration: number, volume: number) => {
+    const playNoise = (start: number, duration: number, volume: number, cutoff = 5200) => {
       const audioCtx = state.audioCtx;
-      const master = state.master;
-      if (!audioCtx || !master) return;
+      const out = state.mix;
+      if (!audioCtx || !out) return;
       const buffer = audioCtx.createBuffer(1, Math.max(1, Math.floor(audioCtx.sampleRate * duration)), audioCtx.sampleRate);
       const data = buffer.getChannelData(0);
       for (let i = 0; i < data.length; i += 1) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
@@ -175,76 +190,137 @@ export default function RhythmRush() {
       const gain = audioCtx.createGain();
       const filter = audioCtx.createBiquadFilter();
       filter.type = "highpass";
-      filter.frequency.value = 5200;
+      filter.frequency.value = cutoff;
       gain.gain.setValueAtTime(volume, start);
       gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
       source.buffer = buffer;
       source.connect(filter);
       filter.connect(gain);
-      gain.connect(master);
+      gain.connect(out);
       source.start(start);
     };
 
-    const soundtrackBpm = (elapsed: number) => Math.min(142, 78 + elapsed * 0.95);
-    const scheduleSoundtrack = (elapsed: number) => {
-      if (hasCustomSong()) return;
+    const playKick = (start: number) => {
       const audioCtx = state.audioCtx;
-      if (!audioCtx || !state.master || !state.started || state.gameOver) return;
-      while (state.nextBeatGame < elapsed + 0.35) {
-        const start = audioCtx.currentTime + Math.max(0, state.nextBeatGame - elapsed);
-        const beat = state.beatIndex;
-        const bass = [55, 65.41, 73.42, 49][Math.floor(beat / 8) % 4];
-        if (beat % 4 === 0) {
-          playTone(58, start, 0.16, "sine", 0.62);
-          playTone(bass, start, 0.34, "sawtooth", 0.24);
-        }
-        if (beat % 4 === 2) playNoise(start, 0.12, 0.16);
-        playNoise(start + 0.01, 0.035, beat % 2 === 0 ? 0.04 : 0.028);
-        if (beat % 8 === 0) [261.63, 329.63, 392.0].forEach((freq) => playTone(freq, start + 0.02, 0.85, "triangle", 0.075));
-        if (beat % 8 === 4) [293.66, 349.23, 440.0].forEach((freq) => playTone(freq, start + 0.02, 0.78, "triangle", 0.068));
-        if (elapsed > 18 && beat % 2 === 1) playTone([523.25, 587.33, 659.25, 783.99][beat % 4], start, 0.12, "square", 0.05);
-        state.beatIndex += 1;
-        state.nextBeatGame += 60 / soundtrackBpm(state.nextBeatGame);
-      }
+      const out = state.mix;
+      if (!audioCtx || !out) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.frequency.setValueAtTime(150, start);
+      osc.frequency.exponentialRampToValueAtTime(45, start + 0.12);
+      gain.gain.setValueAtTime(0.75, start);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.24);
+      osc.connect(gain);
+      gain.connect(out);
+      osc.start(start);
+      osc.stop(start + 0.26);
+    };
 
-      const melodyPacks = [
-        [659.25, 783.99, 880.0, 987.77],
-        [587.33, 739.99, 830.61, 987.77],
-        [659.25, 783.99, 1046.5, 1174.66],
-        [523.25, 659.25, 783.99, 1046.5],
-      ];
-      while (state.nextNoteSoundIndex < state.notes.length && state.notes[state.nextNoteSoundIndex].hitTime < elapsed + 1.1) {
-        const note = state.notes[state.nextNoteSoundIndex];
-        const start = audioCtx.currentTime + Math.max(0, note.hitTime - elapsed);
-        const pack = melodyPacks[Math.floor(note.hitTime / 8) % melodyPacks.length];
-        const frequency = pack[note.lane];
-        const duration = note.holdTime > 0 ? Math.min(note.holdTime + 0.08, 1.5) : 0.14;
-        playTone(frequency, start, duration, note.holdTime > 0 ? "sawtooth" : "square", note.holdTime > 0 ? 0.13 : 0.105);
-        playTone(frequency * 2, start + 0.01, Math.min(duration, 0.55), "triangle", note.holdTime > 0 ? 0.052 : 0.038);
+    const playSnare = (start: number) => {
+      playNoise(start, 0.17, 0.16, 1600);
+      playTone(185, start, 0.09, "triangle", 0.09);
+    };
+
+    const scheduleBar = (bar: Bar) => {
+      const beat = 60 / bar.bpm;
+      const chord = progression[bar.chord];
+      const barStart = state.audioStart + bar.time;
+      if (bar.level >= 0) {
+        chord.pad.forEach((midi) => {
+          playTone(midiToFreq(midi), barStart, beat * 4, "triangle", 0.05, { attack: 0.25 });
+          playTone(midiToFreq(midi) * 1.004, barStart, beat * 4, "sawtooth", 0.018, { attack: 0.3, cutoff: 1300 });
+        });
+      }
+      if (bar.level === 0) playTone(midiToFreq(chord.bass), barStart, beat * 3.8, "triangle", 0.22, { attack: 0.03 });
+      for (let eighth = 0; eighth < 8; eighth += 1) {
+        const t = barStart + eighth * beat * 0.5;
+        const onBeat = eighth % 2 === 0;
+        if (bar.level < 0) {
+          // Count-in clicks, accented on the downbeat.
+          if (onBeat) playNoise(t, 0.05, eighth === 0 ? 0.12 : 0.07, 6500);
+          continue;
+        }
+        if (onBeat || bar.level >= 1) playNoise(t, 0.035, onBeat ? 0.04 : 0.055, 7000);
+        if (bar.level >= 1) {
+          if (eighth === 0 || eighth === 4 || (bar.level >= 3 && eighth === 5)) playKick(t);
+          if (eighth === 2 || eighth === 6) playSnare(t);
+          const octavePop = bar.level >= 2 && !onBeat ? 12 : 0;
+          playTone(midiToFreq(chord.bass + octavePop), t, beat * 0.45, "sawtooth", 0.13, { cutoff: 900 });
+        }
+        if (bar.level >= 2) {
+          const arp = [chord.pad[0], chord.pad[1], chord.pad[2], chord.pad[1]];
+          playTone(midiToFreq(arp[eighth % 4] + 12), t, beat * 0.4, "triangle", 0.035);
+        }
+      }
+    };
+
+    const scheduleSoundtrack = (elapsed: number) => {
+      const audioCtx = state.audioCtx;
+      if (!audioCtx || !state.mix || !state.audioReady || !state.started || state.gameOver) return;
+      const horizon = elapsed + 0.5;
+      const bars = state.song.bars;
+      while (state.nextBar < bars.length && bars[state.nextBar].time < horizon) {
+        scheduleBar(bars[state.nextBar]);
+        state.nextBar += 1;
+      }
+      const notes = state.song.notes;
+      while (state.nextNoteSoundIndex < notes.length && notes[state.nextNoteSoundIndex].hitTime < horizon) {
+        const note = notes[state.nextNoteSoundIndex];
+        const start = Math.max(audioCtx.currentTime, state.audioStart + note.hitTime);
+        const frequency = midiToFreq(note.pitch);
+        const isHold = note.holdTime > 0;
+        const duration = isHold ? Math.min(note.holdTime + 0.08, 1.5) : 0.18;
+        playTone(frequency, start, duration, isHold ? "sawtooth" : "square", isHold ? 0.1 : 0.075, { cutoff: isHold ? 2400 : 3200 });
+        playTone(frequency * 2, start + 0.01, Math.min(duration, 0.55), "triangle", isHold ? 0.045 : 0.035);
         state.nextNoteSoundIndex += 1;
       }
     };
 
+    const stopMix = () => {
+      state.run += 1;
+      state.audioReady = false;
+      const mix = state.mix;
+      const audioCtx = state.audioCtx;
+      state.mix = null;
+      if (!mix || !audioCtx) return;
+      mix.gain.setTargetAtTime(0, audioCtx.currentTime, 0.03);
+      window.setTimeout(() => mix.disconnect(), 300);
+    };
+
+    // Starts a fresh run of the soundtrack and lines the game clock up with the audio clock,
+    // including output latency, so a note reaches the hit line exactly when it is heard.
+    const startMix = () => {
+      stopMix();
+      state.startedAt = performance.now() + 150;
+      state.nextBar = 0;
+      state.nextNoteSoundIndex = 0;
+      const audioCtx = ensureAudio();
+      if (!audioCtx || !state.master) return;
+      const run = state.run;
+      void audioCtx.resume().then(() => {
+        if (run !== state.run || !state.master) return;
+        const mix = audioCtx.createGain();
+        mix.connect(state.master);
+        state.mix = mix;
+        const lead = 0.15;
+        const latency = audioCtx.outputLatency || audioCtx.baseLatency || 0;
+        state.audioStart = audioCtx.currentTime + lead;
+        state.startedAt = performance.now() + (lead + latency) * 1000;
+        state.audioReady = true;
+      });
+    };
+
     const startGame = () => {
       if (state.started) return;
-      const audioCtx = ensureAudio();
-      void audioCtx?.resume();
       state.started = true;
-      state.startedAt = performance.now();
-      if (hasCustomSong() && audio) {
-        audio.currentTime = 0;
-        void audio.play();
-      }
-      state.nextBeatGame = 0;
-      state.nextNoteSoundIndex = 0;
-      state.beatIndex = 0;
       state.endlessLoops = 0;
+      startMix();
       state.judgement = "Easier intro — it only gets faster, then stays hard.";
       state.judgementColor = "#34d399";
     };
 
     const reset = (startNow = false) => {
-      state.notes = createChart();
+      state.song = createSong();
       state.started = startNow;
       state.startedAt = performance.now();
       state.score = 0;
@@ -258,18 +334,9 @@ export default function RhythmRush() {
       state.flash = [0, 0, 0, 0];
       state.held = [false, false, false, false];
       state.shake = 0;
-      state.nextBeatGame = 0;
-      state.nextNoteSoundIndex = 0;
-      state.beatIndex = 0;
       state.endlessLoops = 0;
-      if (startNow) {
-        const audioCtx = ensureAudio();
-        void audioCtx?.resume();
-        if (hasCustomSong() && audio) {
-          audio.currentTime = 0;
-          void audio.play();
-        }
-      } else if (audio) audio.pause();
+      if (startNow) startMix();
+      else stopMix();
     };
 
     const triggerGameOver = () => {
@@ -278,7 +345,7 @@ export default function RhythmRush() {
       state.judgement = "GAME OVER — 5 mistakes. Press R to restart.";
       state.judgementColor = "#fb7185";
       state.shake = 22;
-      if (audio) audio.pause();
+      stopMix();
     };
 
     const registerMistake = (message: string) => {
@@ -318,7 +385,7 @@ export default function RhythmRush() {
       const elapsed = currentGameTime();
       let best: Note | undefined;
       let bestDiff = Infinity;
-      for (const note of state.notes) {
+      for (const note of state.song.notes) {
         if (note.lane !== lane || note.hit || note.missed || note.completed) continue;
         const diff = Math.abs(note.hitTime - elapsed);
         if (diff < bestDiff) {
@@ -386,7 +453,7 @@ export default function RhythmRush() {
       if (lane < 0) return;
       state.held[lane] = false;
       const elapsed = state.started ? currentGameTime() : 0;
-      const hold = state.notes.find((note) => note.lane === lane && note.holding && !note.completed && !note.missed);
+      const hold = state.song.notes.find((note) => note.lane === lane && note.holding && !note.completed && !note.missed);
       if (!hold) return;
       if (elapsed < hold.hitTime + hold.holdTime - 0.24) dropHold(hold);
       else completeHold(hold);
@@ -422,17 +489,15 @@ export default function RhythmRush() {
       state.shake = Math.max(0, state.shake - 0.8);
 
       if (state.started && !state.gameOver) {
-        const lastNoteEnd = state.notes.reduce((latest, note) => Math.max(latest, note.hitTime + note.holdTime), 0);
-        if (lastNoteEnd - elapsed < 12) {
-          const offset = lastNoteEnd + 1.0;
-          state.notes.push(...createHardEndlessChunk(offset, state.endlessLoops));
+        if (state.song.end - elapsed < 12) {
+          appendHardEndlessChunk(state.song, state.endlessLoops);
           state.endlessLoops += 1;
           state.judgement = state.endlessLoops < 5 ? "Endless mode — faster hard notes added." : "Max speed reached — it stays hard forever.";
           state.judgementColor = "#bae6fd";
         }
       }
 
-      for (const note of state.notes) {
+      for (const note of state.song.notes) {
         if (!state.started || state.gameOver || note.completed || note.missed) continue;
         if (!note.hit && elapsed - note.hitTime > 0.34) {
           note.missed = true;
@@ -503,7 +568,7 @@ export default function RhythmRush() {
       ctx.fillRect(boardX, hitY - 3, boardW, 6);
       ctx.shadowBlur = 0;
 
-      for (const note of state.notes) {
+      for (const note of state.song.notes) {
         if (note.completed || note.missed) continue;
         const noteSpeed = (hitY - topY) / note.travelTime;
         const rawY = hitY - (note.hitTime - elapsed) * noteSpeed;
@@ -583,11 +648,6 @@ export default function RhythmRush() {
       window.removeEventListener("keyup", onKeyUp);
       canvas.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("resize", resize);
-      if (audio) {
-        audio.pause();
-        const objectUrl = audio.dataset.objectUrl;
-        if (objectUrl) URL.revokeObjectURL(objectUrl);
-      }
       void state.audioCtx?.close();
     };
   }, []);
@@ -595,18 +655,15 @@ export default function RhythmRush() {
   return (
     <main className="relative min-h-screen overflow-hidden bg-slate-950 text-white">
       <canvas ref={canvasRef} className="absolute inset-0" />
-      <audio ref={audioRef} preload="auto" />
-      <input accept="audio/*" className="hidden" onChange={chooseCustomSong} ref={fileInputRef} type="file" />
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between p-6">
         <div className="pointer-events-auto flex flex-wrap gap-3">
           <Link className="rounded-full border border-white/10 bg-black/45 px-5 py-3 text-sm font-black uppercase tracking-[0.2em] backdrop-blur transition hover:bg-white/10" to="/">← Lobby</Link>
-          <button className="rounded-full border border-cyan-200/20 bg-cyan-300/15 px-5 py-3 text-sm font-black uppercase tracking-[0.18em] text-cyan-100 backdrop-blur transition hover:bg-cyan-300/25" onClick={() => fileInputRef.current?.click()} type="button">Use My Song</button>
         </div>
         <div className="rounded-[1.5rem] border border-cyan-200/20 bg-black/50 px-6 py-4 text-right shadow-2xl backdrop-blur">
           <p className="text-xs font-black uppercase tracking-[0.3em] text-cyan-200">Free Game</p>
           <h1 className="text-3xl font-black">Rhythm Rush</h1>
           <p className="mt-1 text-sm font-semibold text-slate-300">Starts easy, only gets faster, then stays hard</p>
-          <p className="mt-2 max-w-sm truncate text-xs font-bold text-cyan-100/80">Song: {songName}</p>
+          <p className="mt-2 max-w-sm truncate text-xs font-bold text-cyan-100/80">Song: Neon Drift (original soundtrack)</p>
         </div>
       </div>
       <div ref={hudRef} className="pointer-events-none absolute left-6 top-28 z-20 grid w-72 gap-3 rounded-[1.5rem] border border-white/10 bg-black/55 p-5 text-sm shadow-2xl backdrop-blur [&_div]:flex [&_div]:items-center [&_div]:justify-between [&_strong]:text-xl [&_strong]:font-black" />

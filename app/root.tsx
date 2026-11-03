@@ -44,9 +44,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 const GAME_CENTER_PASSWORD = "5933";
 
-function GameCenterPasswordGate({ onUnlock }: { onUnlock: () => void }) {
+function GameCenterPasswordGate({ onUnlock, initialError = "" }: { onUnlock: () => void; initialError?: string }) {
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState(initialError);
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -74,6 +74,9 @@ function GameCenterPasswordGate({ onUnlock }: { onUnlock: () => void }) {
           type="password"
           value={password}
         />
+        <p className="mt-2 text-center text-sm text-slate-500">
+          Hint: {GAME_CENTER_PASSWORD[0]}**{GAME_CENTER_PASSWORD[GAME_CENTER_PASSWORD.length - 1]}
+        </p>
         {error && <p className="mt-3 text-center text-sm font-bold text-red-600">{error}</p>}
       </form>
     </main>
@@ -144,8 +147,23 @@ function CanvaBlankPage() {
 export default function App() {
   const [unlocked, setUnlocked] = useState(false);
   const [canvaMode, setCanvaMode] = useState(false);
+  const [gateError, setGateError] = useState<string | null>(null);
 
   useEffect(() => {
+    const url = new URL(window.location.href);
+    const urlPassword = url.searchParams.get("password");
+    if (urlPassword !== null) {
+      url.searchParams.delete("password");
+      window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+      if (urlPassword === GAME_CENTER_PASSWORD) {
+        sessionStorage.setItem("game-center-unlocked", "yes");
+        setUnlocked(true);
+      } else {
+        sessionStorage.removeItem("game-center-unlocked");
+        setGateError("Password is incorrect; please reenter");
+      }
+      return;
+    }
     if (sessionStorage.getItem("game-center-unlocked") === "yes") setUnlocked(true);
   }, []);
 
@@ -170,7 +188,7 @@ export default function App() {
     return () => window.removeEventListener("keydown", handleShortcut, true);
   }, [unlocked]);
 
-  if (!unlocked) return <GameCenterPasswordGate onUnlock={() => setUnlocked(true)} />;
+  if (!unlocked) return <GameCenterPasswordGate key={gateError ?? ""} initialError={gateError ?? ""} onUnlock={() => setUnlocked(true)} />;
   if (canvaMode) return <CanvaBlankPage />;
   return <Outlet />;
 }

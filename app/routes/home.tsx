@@ -15,8 +15,7 @@ export function meta({}: Route.MetaArgs) {
 type Game = {
   title: string;
   description: string;
-  accent: string;
-  icon: string;
+  screenshot: string;
   href?: string;
 };
 
@@ -24,58 +23,56 @@ const games: Game[] = [
   {
     title: "Tank Fight",
     description: "Armor up for tactical arena battles with explosive power-ups.",
-    accent: "from-lime-300 to-emerald-400",
-    icon: "TF",
+    screenshot: "/screenshots/tank-fight.jpg",
     href: "/tank-fight",
   },
   {
     title: "Super Mario",
     description: "Dash through bright worlds, secret pipes, and classic platforming chaos.",
-    accent: "from-amber-300 to-orange-500",
-    icon: "SM",
+    screenshot: "/screenshots/super-mario.jpg",
     href: "/super-mario",
   },
   {
     title: "Sky Ace Infinite",
     description: "Take the sky in high-speed dogfights built for quick reflexes.",
-    accent: "from-cyan-300 to-blue-500",
-    icon: "SA",
+    screenshot: "/screenshots/sky-ace-infinite.jpg",
     href: "/sky-ace-infinite",
   },
   {
     title: "Three Body Survival",
     description: "Survive chaotic suns, unstable weather, and a fragile body on an alien world.",
-    accent: "from-violet-300 to-fuchsia-500",
-    icon: "3B",
+    screenshot: "/screenshots/three-body-survival.jpg",
     href: "/three-body-survival",
   },
   {
     title: "Rhythm Rush",
     description: "Hit falling rhythm notes with Z, X, comma, and period in polished neon lanes.",
-    accent: "from-pink-300 to-cyan-400",
-    icon: "RR",
+    screenshot: "/screenshots/rhythm-rush.jpg",
     href: "/rhythm-rush",
   },
   {
     title: "Feather Fling",
     description: "Launch birds from a stronger slingshot, smash towers, and directly hit every grumpy pig.",
-    accent: "from-red-300 to-amber-400",
-    icon: "FF",
+    screenshot: "/screenshots/angry-bird.jpg",
     href: "/angry-bird",
   },
   {
     title: "Block Drop Duel",
     description: "Stack blocks against a silly adaptive AI. Clear lines to dump garbage onto its board.",
-    accent: "from-cyan-300 to-purple-400",
-    icon: "BD",
+    screenshot: "/screenshots/tetras-duel.jpg",
     href: "/tetras-duel",
   },
   {
     title: "Rough Run",
     description: "Run across an alien planet with a blaster while detailed robot squads attack the force gates.",
-    accent: "from-cyan-300 to-purple-400",
-    icon: "RR",
+    screenshot: "/screenshots/rogue-blaster.jpg",
     href: "/rogue-blaster",
+  },
+  {
+    title: "First Game",
+    description: "A Godot platformer: grab the sword, stomp slimes, and portal through five boss stages.",
+    screenshot: "/screenshots/first-game.jpg",
+    href: "/first-game",
   },
 ];
 
@@ -85,10 +82,13 @@ const gameCardClass =
 function GameCard({ game }: { game: Game }) {
   const content = (
     <>
-      <div
-        className={`mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br ${game.accent} text-lg font-black text-slate-950 shadow-lg transition group-hover:rotate-3 group-hover:scale-105`}
-      >
-        {game.icon}
+      <div className="mb-6 aspect-video overflow-hidden rounded-2xl border border-white/10 bg-slate-900 shadow-lg">
+        <img
+          alt={`${game.title} gameplay`}
+          className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+          loading="lazy"
+          src={game.screenshot}
+        />
       </div>
       <h2 className="text-2xl font-bold">{game.title}</h2>
       <p className="mt-3 text-sm leading-6 text-slate-300">
@@ -215,7 +215,7 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="mt-16 grid gap-5 md:grid-cols-2 xl:grid-cols-8" id="games">
+        <div className="mt-16 grid gap-5 md:grid-cols-2 xl:grid-cols-3" id="games">
           {games.map((game) => (
             <GameCard game={game} key={game.title} />
           ))}
