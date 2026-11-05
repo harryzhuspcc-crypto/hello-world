@@ -21,6 +21,12 @@ type Game = {
 
 const games: Game[] = [
   {
+    title: "City Warrior",
+    description: "Fight through the streets, industrial yard, and woods in a three-stage pixel-art beat 'em up.",
+    screenshot: "/screenshots/city-warrior.png",
+    href: "/city-warrior",
+  },
+  {
     title: "Tank Fight",
     description: "Armor up for tactical arena battles with explosive power-ups.",
     screenshot: "/screenshots/tank-fight.jpg",

@@ -1,0 +1,51 @@
+{
+  "game": "city-warrior",
+  "source_commit": "cb5f470aa40cdb6792416af041e40e2e51481d79",
+  "wasm_sha256": "fc74679e3b97f76878947fcd4fbe1268cbfa6188182a2e33bbc3f5dc9bfa57d0",
+  "files": {
+    "cloudflare-wasm.js": {
+      "bytes": 1031,
+      "sha256": "4cc93d4bdf211a7de925fe6e1bd413b7758c69fa4062e9dbad71a8aa336ec875"
+    },
+    "index.apple-touch-icon.png": {
+      "bytes": 11939,
+      "sha256": "071ccd3c3619e62c9e27995cf1afde427bb1b630767801a0fe1ac33505b2f221"
+    },
+    "index.audio.position.worklet.js": {
+      "bytes": 2973,
+      "sha256": "be33985bc7160d6bf9646f259cd86b259cd67b02ccb297ee5c44f8ac84327bc8"
+    },
+    "index.audio.worklet.js": {
+      "bytes": 7298,
+      "sha256": "5b476a9c9ce642c0ee4256436d1bc31d9c38f868aca0f9a8e2a57c18d2dec2a3"
+    },
+    "index.html": {
+      "bytes": 5488,
+      "sha256": "f831f1bb457594816ca348b4688341152d1ac8123c09e97f131f14a40c4b1d13"
+    },
+    "index.icon.png": {
+      "bytes": 5765,
+      "sha256": "662f81d7672001a6f5f928532493267c226624757de3b5fa2908f6e5923964b7"
+    },
+    "index.js": {
+      "bytes": 279815,
+      "sha256": "33c94cb3175f3333b82e2a3be5e8e86f77986f0aa2042b1631f6367a4e5bb6ba"
+    },
+    "index.pck": {
+      "bytes": 13535452,
+      "sha256": "21532fe2a3f7156a8a0c0a38cda931a0f5bfbc466c7f7410ae202be0f15b0898"
+    },
+    "index.png": {
+      "bytes": 21443,
+      "sha256": "3cb4495c0b98dfbe4b663cbf2b6836473572339beb66d902367893162a70be0e"
+    },
+    "index.wasm.parta": {
+      "bytes": 20971520,
+      "sha256": "9ca0d6be7c59074a68ada3d7a62818c5bcefcc7535b07fb308e88abf24527373"
+    },
+    "index.wasm.partb": {
+      "bytes": 18543234,
+      "sha256": "ee347fd86d64916170f6f68ade141faf793b60dade38b6ce6a9acd83a5062538"
+    }
+  }
+}
