@@ -1,6 +1,6 @@
 {
   "game": "city-warrior",
-  "source_commit": "cb5f470aa40cdb6792416af041e40e2e51481d79",
+  "source_commit": "333da06e3f80c8032e8ff34c02b2eec90136859c",
   "wasm_sha256": "fc74679e3b97f76878947fcd4fbe1268cbfa6188182a2e33bbc3f5dc9bfa57d0",
   "files": {
     "cloudflare-wasm.js": {
@@ -21,7 +21,7 @@
     },
     "index.html": {
       "bytes": 5488,
-      "sha256": "f831f1bb457594816ca348b4688341152d1ac8123c09e97f131f14a40c4b1d13"
+      "sha256": "64ef6c49454c8df3accf30e13e1fae7ba0a4956c49956a3f9fcabd3db1a96a58"
     },
     "index.icon.png": {
       "bytes": 5765,
@@ -32,8 +32,8 @@
       "sha256": "33c94cb3175f3333b82e2a3be5e8e86f77986f0aa2042b1631f6367a4e5bb6ba"
     },
     "index.pck": {
-      "bytes": 13535452,
-      "sha256": "21532fe2a3f7156a8a0c0a38cda931a0f5bfbc466c7f7410ae202be0f15b0898"
+      "bytes": 16737120,
+      "sha256": "0e6c610f53dadba4adfd84365aa27ee32a6d83f0780d6a931a88a7c4d2537d4a"
     },
     "index.png": {
       "bytes": 21443,

@@ -7,7 +7,7 @@ export function meta({}: Route.MetaArgs) {
     { title: "City Warrior | Harry's Game Center" },
     {
       name: "description",
-      content: "Play City Warrior: three stages of pixel-art fighting, forgiving platform jumps, and boss battles.",
+      content: "Play City Warrior: four stages of pixel-art fighting, timed stone-block traps, and a final showdown with Willy.",
     },
   ];
 }

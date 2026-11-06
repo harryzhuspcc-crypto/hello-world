@@ -3,7 +3,7 @@
 Game source: `/Users/harryzhu/godot/city-warrior`.
 
 Build the committed game in a clean worktree with `python3 tools/build_web.py`.
-That command tests each of the three stages from the actual exported pack.
+That command tests each of the four stages from the actual exported pack.
 Import that release into this website:
 
 ```sh
